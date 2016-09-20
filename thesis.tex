@@ -1,0 +1,331 @@
+
+\documentclass[onehalf,11pt]{beavtex}
+\title{GPU-Based Fluid Structure Interaction using Immersed Boundary Methods}
+\author{Christopher Minar}
+\degree{Masters of Science}
+\doctype{Masters Thesis}
+\department{Mechanical Industrial and Manufacturing Engineering}
+\depttype{School}
+\depthead{Director}
+\major{Mechanical Engineering}
+\advisor{Kyle Niemeyer}
+\submitdate{September 23, 2016}
+\commencementyear{2016}
+\abstract{Engineering applications often require fast, accurate solutions of fluid flow around freely moving bodies.
+The massive parallelism enabled by GPU architecture enables high performance, offering a promising alternative to traditional solver acceleration via multicore CPUs.
+However, fully harnessing GPU parallelism requires specialized algorithms and computing strategies.
+This work modifies a direct-forcing immersed boundary method to model fluid-structure interaction and investigates its behavior on GPUs.
+We performed verification of our solver using lid-driven cavity flow and impulsively started flow over a cylinder, and investigated its behavior with flow over a forced oscillating cylinder.}
+\acknowledgements{We gratefully acknowledge the support of NVIDIA Corporation with the donation of the Tesla K\subsubsection0 GPU used for this research.
+We also thank the Barba Group for developing, maintaining, and distributing their cuIBM code.}
+
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage[textsize=footnotesize]{todonotes}%used for inline todo notes with \todo[]{}
+\usepackage{latexsym,amsmath,amssymb} %math packages
+\usepackage{tikz} %used for tikz graphics
+\usepackage{standalone}  %used for tikz graphics
+\usetikzlibrary{shapes}  %used for tikz graphics
+\usepackage{graphicx} %needed for subfigure
+\usepackage{float,caption,subcaption} %figure stuff
+\graphicspath{{./figure/}} %figure path
+
+
+\begin{document}
+\todo[inline]{fix margins}
+\todo[inline]{change Fadlun to fadlun et al}
+\maketitle
+
+\mainmatter
+
+\chapter{Introduction}
+Immersed boundary methods (IBMs) are a broad term referring to of group of approaches used for simulating fluid flow over complex bodies.
+The goal of IBMs is to represent a surface on a structured grid, removing the need to create a body fitted mesh.
+These techniques are well-suited for simulating flow involving complex moving bodies because they do not require re-meshing between time steps.
+We have developed an IBM solver for operation on graphics processing units (GPUs) designed to handle incompressible fluid--structure interaction problems with rigid bodies.
+
+Peskin~\cite{Peskin:1972gh} first introduced the IBM in the 1970s to model blood flow with elastic boundaries.
+The original IBM adds a forcing term to the Navier--Stokes equations that only acts near a body.
+This forcing term simulates the force the body applies on the fluid, and is modeled as a spring.
+Peskin's IBM was designed to handle elastic, deforming bodies.
+One way to effectively implement Peskin's IBM for rigid bodies is to set a large spring coefficient; however, this makes the equations numerically stiff.
+
+The IBM has since evolved to be applicable to a wide range of problems, as reviewed by Mittal and Iaccarino~\cite{Mittal:2005ii} and more recently Sotiropoulos and Yang~\cite{Sotiropoulos:2014gv}.
+Mohd-Yusof~\cite{MohdYusof:1997wh} and Fadlun et al.~\cite{Fadlun:2000fl} developed a version for rigid bodies called the direct forcing method.
+Instead of solving for the added force term in the Navier--Stokes equation, the velocities at the nodes nearest to the body are interpolated for using the body velocity to enforce the no-slip condition.
+However, using the direct forcing method with a moving body causes numerical oscillations~\cite{liao2010simulating}~\cite{Luo:2012gx}.
+This effect is manageable for preset motion but with a freely moving body the solver will poorly predict body position, velocity, and forces.
+The numerical oscillations are caused by nodes switching representations between time steps, e.g., a node near the body (and thus treated differently) becoming a node solved for with the Navier--Stokes equations.
+The approach of Luo et al.~\cite{Luo:2012gx} deals with the numerical oscillations by using a weighting function to transition between the two schemes.
+
+The goal of this project is to develop a GPU-based solver capable of simulating 2D, incompressible flow over a moving, complex body. 
+\todo[inline]{write end purpose of solver}
+\todo[inline]{give solver a name}
+\todo[inline]{add segment about lee and lee}
+Chapter \ref{Numerical Methods} will discuss the theory of several direct forcing methods and their applicability to freely moving bodies. 
+Chapter \ref{Implementation} cover the discretization of the methods as well as the challenges, strategies and implementation of the GPU.
+Chapter \ref{Validation} will show the validation and verification of different aspects of the solver using five different test cases; lid driven cavity, flow over an impulsively started cylinder, forced motion of a cylinder in static flow, forced motion of a cylinder in flow and vorticity induced vibrations (VIV).
+\todo[inline]{make sure that is the correct words for VIV}
+The final chapter will discuss the results, go over problems and recommend future work.
+
+\chapter{Numerical Methods}\label{Numerical Methods}
+Fluid flow is governed by the two-dimensional, incompressible form of the Navier--Stokes and mass continuity equations:
+\begin{align}
+\frac{\partial \textbf{u}}{\partial t} + \nabla ( \textbf{uu} ) &= -\nabla p + \nu\nabla^{2}\textbf{u} + \textbf{f} \label{eq:NavierStokes} \\
+\nabla \cdot \textbf{u} &= 0 \label{eq:Continuity} \;.
+\end{align}
+Here, $u$ is velocity, $p$ is pressure and $\nu$ is the constant kinematic viscosity.
+\todo[inline]{what is f}
+
+\section{Navier--Stokes Fractional Step}\label{NM:NavierStokes}
+Equations \eqref{eq:NavierStokes} and \eqref{eq:Continuity} are solved using the fractional step method (e.g., \cite{Perot1993}). 
+In the first step, an advection-diffusion equation without pressure is used to calculate an intermediate velocity:
+\begin{equation}\label{eq:Intermediate Velocity}
+\hat{\textbf{u}} - \frac{\Delta t}{2}L(\hat{\textbf{u}}) = \textbf{u}^n + \Delta t(\textbf{RHS}^n) \;,
+\end{equation}
+where $\hat{\textbf{u}}$ is the intermediate velocity, $\Delta t$ is the time step, $L$ is the Laplacian operator and $\textbf{RHS}$ is the explicit, discretized advection and diffusion terms.
+The superscript $n$ represents the time step.
+In time, second-order Adams--Bashforth and Crank--Nicolson methods are used to discretize the advection and diffustion terms, respectively.
+\todo[inline]{move this line to the implementation section}
+
+In the second step, the continuity equation is imposed to approximate the pressure, $p$:
+\begin{equation}\label{eq:Poisson}
+\nabla^2p^{n+1} = - \frac{\nabla\hat{\textbf{u}}}{\Delta t} \;,
+\end{equation}
+
+Velocity is updated in the last step with:
+\begin{equation}\label{eq:Projection}
+\textbf{u}^{n+1} = \hat{\textbf{u}} - \Delta t\nabla p^{n+1} \;.
+\end{equation}
+
+\section{Node Identification}
+To facilitate the discussion of IBMs the nomenclature with regards to point identification will be touched on here. 
+The nomenclature is mostly adopted from the work of Luo et al.\cite{Luo:2012gx}
+\todo[inline]{add figure for node identification}
+\todo[inline]{add text for node identification}
+
+\begin{figure}[htb] %this should probably go somehwer eelse
+    \centering
+    \includestandalone[width=0.5\linewidth]{basic_interp_figure}
+    \caption{A simplified diagram of linear interpolation for velocity values at the hybrid node}
+    \label{fig:2}
+\end{figure}
+
+\section{Fadlun}
+In Peskin's\cite{Peskin:1972gh} IBM the forcing term $f$ in Equation \eqref{eq:NavierStokes} is solved for at the hybrid nodes in a way that enforces no-slip. 
+In the direct forcing methods developed by Fadlun\cite{Fadlun:2000fl} and Yusof\cite{MohdYusof:1997wh} the navier stokes equation isn't solved at the hybrid nodes. 
+Instead, the velocity at the hybrid node is approximated by linearly interpolating between the second hybrid node and the body surface. 
+As explained by Fadlun it is appropriate to enforce this approximation in the intermediate velocity step.
+\todo[inline]{why is it appropriate to enforce this in the intermediate velocity step}
+\todo[inline]{when is this approximation not viable?}
+\todo[inline]{figure to demonstrate linear interpolation}
+$\textbf{RHS}$ and $1-\frac{\Delta t}{2}L$ from Equation \eqref{eq:Intermediate Velocity} can be setup as if they was no body, then modified at the hybrid nodes to enforce no slip with the linear interpolation.
+The discretization of this is shown in appendix \ref{Fadlun Linear Interpolation}
+\todo[inline]{add reference to the discretization of the normal part of RHS and LHS}
+The Poisson Equation \ref{eq:Poisson} and projection step \ref{eq:Projection} are left unmodified in the work of Fadlun et al.
+
+\section{Modified Fadlun}
+If the Poisson equation  equation to account for the presence of a body, the continuity equation will not be satisfied. 
+Depending on the type of simulation this can create significant creation or destruction of mass at the body, leading to poor solver accuracy.
+Researchers following \todo[]{find researchers} Fadlun et al. suggested several different ways to solve this problem.
+\todo[inline]{outline lee lee method}
+\todo[inline]{explain my method}
+
+\section{Luo}
+
+Direct forcing methods suffer from numerical oscillation when the immersed body is moving.
+\todo[inline]{cite oscillations in direct forcing}
+As the body moves, background nodes change how they calculate values. 
+For example Figure~\ref{fig:Temporal Discontinuity} depicts a bulk fluid $u$ velocity node at time step $t^n$ become a hybrid node at time step $t^{n+1}$.
+As the node transitions the intermediate velocity will change from being calculated by Equation ~\eqref{eq:Intermediate Velocity} to Equation.
+\todo[inline]{add equation and reference to equation the does the linear interpolation}
+Equations \eqref{eq:Intermediate Velocity} and \todo[]{add eq ref} are both correct representations for the intermediate velocity but they have different errors associated with them which causes the calculated velocity to be slightly different.
+This discontinuous change in velocity is responsible for the numerical oscillations.
+\todo[inline]{reference luo et al somewhere in this explanation}
+Note that this effect happens whenever any node transitions, not just the intermediate $u$ velocity nodes.
+\todo[inline]{give a more in depth look at the math that happens which causes this error to happen?}%maybe this should go somewhere else.
+
+\begin{figure}[htb]
+    \centering
+    \includestandalone[width=0.5\linewidth]{figure/node_transition_figure}
+    \caption{A diagram illustrating the immersed body's interaction with the background grid that causes numerical oscillations.}
+    \label{fig:Temporal Discontinuity}
+\end{figure}
+
+The field values (velocity and pressure) are extrapolated across the body such that Eq.~\eqref{eq:NavierStokes} can be solved everywhere, including at the hybrid nodes, using a standard stencil. 
+This process is elaborated on in section \ref{Sec:Field Extrapolation}. 
+In the method proposed by Luo et al.~\cite{Luo:2012gx}, the field values at the hybrid nodes are calculated via both Navier--Stokes and interpolation. 
+The final field values is calculated using a weighted combination of both solutions.
+The weighting is designed smooth the transition between the two solutions. 
+When the hybrid node is close to the body, it will be dominated by the interpolated solution, while a the hybrid node far from the body will be dominated by the Navier--Stokes solution. 
+This process is elaborated on in section \ref{Sec:Weighting}
+
+\subsection{Field extrapolation to ghost nodes}
+\label{Sec:Field Extrapolation}
+
+Field values are extrapolated across the body using the same method as Luo et al.~\cite{Luo:2012gx}.
+Field values are first interpolated at an image point (IP) outside the body, before being extrapolated to a ghost node(GN) using the boundary conditions.
+Since the grid is staggered, the process has three variations.
+Figure~\ref{fig:Interpolate}a shows a schematic of the ghost node extrapolation.
+The first step is to find a body intercept (BI) such that the line between the BI and the ghost node is normal to the body surface.
+The BI is not a Lagrangian body node but should be between two body nodes nearest the GN.
+If the body has curvature, the body intercept will not fall exactly on the body.
+The IP is found by mirroring the GN--BI line across the body.
+The four nodes that bound the IP are then located.
+Any of the four nodes located inside the body are moved to the body surface.
+In the upper shaded box of Figure~\ref{fig:Interpolate}a, the interpolation node would be relocated from the node marked as 1 to the BI.
+
+Next, appropriate values for interpolation are found.
+Any node not located on the body surface uses the field value.
+Any node located on the surface will be calculated using the appropriate boundary condition.
+The no-slip condition for velocity is enforced by setting the interpolation velocity to the body velocity.
+Pressure can be approximated with the Neumann boundary condition:
+\begin{equation}
+    \left. \frac{\partial p}{\partial \textbf{n}}\right|_{BI} = \left. -\rho \frac{D\textbf{u}}{Dt}\cdot \textbf{n}\right|_{BI}
+    \label{eq:Neumann}
+\end{equation}
+where $\rho$ is the density, $D\textbf{u}\left/Dt\right.$ is the material derivative, and $\textbf{n}$ is the unit vector normal to the body.
+
+The value at the IP is calculated with:
+\begin{equation}
+\phi (x,y) = a_0 + a_1 x + a_2y + a_3 x y \label{eq:Interpolation}
+\end{equation}
+where $\phi$ is the variable being interpolated ($u$, $v$, or pressure); $a_0$, $a_1$, $a_2$ and $a_3$ are coefficients, and $x$ and $y$ give the location of the IP.
+The $a_i$ coefficients are solved by setting up a system of four equations using the points and values found previously.
+For a Neumann boundary condition point, substitute
+\begin{equation}
+\phi (x,y) = a_1 + a_2 + a_3 (x+y) \label{eq:Neumann Node}
+\end{equation}
+for Eq.~\eqref{eq:Interpolation}.
+To solve this system on the GPU, we directly invert the $4 \times 4$ matrices.
+
+Once the value at the IP has been found, it can be extrapolated across the body using Eq.~\eqref{eq:Velocity Interpolation} for velocity or Eq.~\eqref{eq:Pressure Interpolation} for pressure:
+\begin{align}
+\textbf{u}_{GN} &= 2\textbf{u}_{BI} - \textbf{u}_{IP} \label{eq:Velocity Interpolation} \\
+p_{GN} &= p_{ip} - \Delta l \left. \frac{\partial p}{\partial \textbf{n}}\right|_{BI} \;, \label{eq:Pressure Interpolation}
+\end{align}
+where $\Delta l$ is the distance from ghost node to image point.
+
+\begin{figure}[htb]
+    \centering
+    \begin{subfigure}{0.3\textwidth}
+        \centering
+        \includestandalone[width=\linewidth]{GN_interp_figure}
+        \caption{Field extrapolation to ghost node}
+    \end{subfigure}
+    ~
+    \begin{subfigure}{0.3\textwidth}
+        \centering
+        \includestandalone[width=\linewidth]{HN_interp_figure}
+        \caption{Hybrid interpolation}
+    \end{subfigure}
+    \caption{A detailed schematic of the hybrid and ghost node interpolations.}
+    \label{fig:Interpolate}
+\end{figure}
+
+\subsection{Interpolation to hybrid nodes}
+\label{Sec:Interpolation}
+
+The field value at the hybrid node is calculated using Eq.~\eqref{eq:Interpolation}.
+The $a_i$ coefficients are calculated using nearby nodes and the boundary condition as seen in Figure~\ref{fig:Interpolate}b.
+The process for finding and calculating the coefficients is similar as for the ghost node process described previously.
+The main differences are the location of the image point and that the hybrid node will always share a location with one of the interpolation corners.
+The interpolation node that is on top of the hybrid node is moved to the BI.
+
+
+\subsection{Field extrapolation to ghost nodes}
+\subsection{Interpolation to hybrid nodes}
+\subsection{Weighting}\label{Sec:Weighting}
+\section{Luo iter}
+\subsection{intermediate velocity with iter}
+\subsection{poisson with iter}
+
+
+\chapter{Implementaiton and Discretization}\label{Implementation}
+\section{Navier--Stokes}
+\subsection{Intermediate velocity}
+\subsubsection{Advection}
+\subsubsection{diffusion}
+\subsubsection{LHS1}
+\subsubsection{boundaries}
+\subsection{Poisson}
+\subsubsection{rhs discretization}
+\subsubsection{LHS2}
+\subsubsection{BC}
+\section{Fadlun}
+\subsection{other body stuff?}
+\subsection{intermediate velocity}
+\subsubsection{interpolation}
+\subsubsection{changes to LHS1} 
+\subsubsection{changes to rhs1}
+\section{Luo}
+\subsection{Field extrapolation to ghost nodes}
+\subsection{Interpolation to hybrid nodes}
+\subsection{Weighting}
+\subsection{Full time step}
+\section{Luo iter}
+\subsection{intermediate velocity with iter}
+\subsection{poisson with iter}
+\subsection{Full time step}
+\section{GPU implementation strategy}
+\section{staggered}
+\section{tag points}
+\section{Calc force}
+\section{luo force}
+\section{solver type and preconditioner issues}
+
+\chapter{Validation and Verification}\label{Validation}
+\section{Lid Driven Cavity}
+\section{Impulsively started cylinder}
+\subsection{luo}
+\subsection{luo iter}
+\subsection{fadlun modified}
+\subsection{fadlun?}
+\section{Static cylinder}
+\subsection{fadlun modified}
+\subsection{luo}
+\subsection{luo iter}
+\section{osc cylinder}
+\subsection{fadlunmodified}
+\subsection{luo}
+\subsection{luo iter}
+\section{viv}
+\subsection{fadlun modified}
+\subsection{luo}
+\subsection{luo iter}
+\chapter{conclusions}
+\chapter{future work}
+
+
+%We're born meat and we die meat. Meanwhile, we learn (see Algorithm \ref{alg:learning}).
+
+%\begin{algorithm}[h]
+%\caption{\textsc{Learning}}
+%\label{alg:learning}
+%\begin{algorithmic}[\chapter]
+%\ENSURE{Optimal policy $\mathcal{C}$}
+%	\STATE $\mathcal{C} \gets 32$
+%	\RETURN $\mathcal{C}$
+%\end{algorithmic}
+%\end{algorithm}
+
+%Wow, that really was excellent.
+%This is the end, my only friend, the end.
+
+%\begin{figure}[!ht]
+%\centering
+%\fbox{\huge Box}
+%\caption{Go figure.}
+%\end{figure}
+
+
+
+\bibliographystyle{plain}
+\bibliography{thesis}
+
+\appendix
+\chapter{Discretization}
+\section{Fadlun}
+\subsection{Fadlun Linear Interpolation}\label{Fadlun Linear Interpolation}
+
+\end{document}
