@@ -152,11 +152,11 @@ Note that this effect happens whenever any node transitions, not just the interm
     \label{fig:Temporal Discontinuity}
 \end{figure}
 
-The field values (velocity and pressure) are extrapolated across the body such that Eq.~\eqref{eq:NavierStokes} can be solved everywhere, including at the hybrid nodes, using a standard stencil. 
+The field values (velocity and pressure) are extrapolated across the body such that Eq.~\eqref{eq:NavierStokes} can be solved at the hybrid nodes using a standard stencil. 
 This process is elaborated on in section \ref{Sec:Field Extrapolation}. 
 In the method proposed by Luo et al.~\cite{Luo:2012gx}, the field values at the hybrid nodes are calculated via both Navier--Stokes and interpolation. 
-The final field values is calculated using a weighted combination of both solutions.
-The weighting is designed smooth the transition between the two solutions. 
+The final field values are calculated using a weighted combination of both solutions.
+The weighting is designed smooth the transition between solutions. 
 When the hybrid node is close to the body, it will be dominated by the interpolated solution, while a the hybrid node far from the body will be dominated by the Navier--Stokes solution. 
 This process is elaborated on in section \ref{Sec:Weighting}
 
@@ -164,67 +164,54 @@ This process is elaborated on in section \ref{Sec:Weighting}
 \label{Sec:Field Extrapolation}
 
 Field values are extrapolated across the body using the same method as Luo et al.~\cite{Luo:2012gx}.
-Field values are first interpolated at an image point (IP) outside the body, before being extrapolated to a ghost node(GN) using the boundary conditions.
-Since the grid is staggered, the process has three variations.
-Figure~\ref{fig:Interpolate}a shows a schematic of the ghost node extrapolation.
-The first step is to find a body intercept (BI) such that the line between the BI and the ghost node is normal to the body surface.
-The BI is not a Lagrangian body node but should be between two body nodes nearest the GN.
+The solver uses a staggered grid, unlike Luo et al. which uses a co-located grid, causing the process to have three variations; one for pressure nodes and ones for u and v velocity nodes.
+Field values are first interpolated at an image point (IP) outside the body using the surrounding field values and the boundary condition. Figure~\ref{Fig:Ghost node extrapolation} depicts the extrapolation for two u velocities.
+The ghost nodes(GN), indicated by solid squares, are projected onto the surface to find the body intercept(BI), indicated by the thick open circle.
+\todo[inline]{change diagram to not have two open circles, its confusing}
+Body nodes used to track the body's position are not the same as the BI and the two are typically not coincident.
 If the body has curvature, the body intercept will not fall exactly on the body.
-The IP is found by mirroring the GN--BI line across the body.
-The four nodes that bound the IP are then located.
-Any of the four nodes located inside the body are moved to the body surface.
-In the upper shaded box of Figure~\ref{fig:Interpolate}a, the interpolation node would be relocated from the node marked as 1 to the BI.
-
-Next, appropriate values for interpolation are found.
-Any node not located on the body surface uses the field value.
-Any node located on the surface will be calculated using the appropriate boundary condition.
-The no-slip condition for velocity is enforced by setting the interpolation velocity to the body velocity.
-Pressure can be approximated with the Neumann boundary condition:
-\begin{equation}
-    \left. \frac{\partial p}{\partial \textbf{n}}\right|_{BI} = \left. -\rho \frac{D\textbf{u}}{Dt}\cdot \textbf{n}\right|_{BI}
-    \label{eq:Neumann}
-\end{equation}
-where $\rho$ is the density, $D\textbf{u}\left/Dt\right.$ is the material derivative, and $\textbf{n}$ is the unit vector normal to the body.
-
-The value at the IP is calculated with:
-\begin{equation}
-\phi (x,y) = a_0 + a_1 x + a_2y + a_3 x y \label{eq:Interpolation}
-\end{equation}
-where $\phi$ is the variable being interpolated ($u$, $v$, or pressure); $a_0$, $a_1$, $a_2$ and $a_3$ are coefficients, and $x$ and $y$ give the location of the IP.
-The $a_i$ coefficients are solved by setting up a system of four equations using the points and values found previously.
-For a Neumann boundary condition point, substitute
-\begin{equation}
-\phi (x,y) = a_1 + a_2 + a_3 (x+y) \label{eq:Neumann Node}
-\end{equation}
-for Eq.~\eqref{eq:Interpolation}.
-To solve this system on the GPU, we directly invert the $4 \times 4$ matrices.
-
-Once the value at the IP has been found, it can be extrapolated across the body using Eq.~\eqref{eq:Velocity Interpolation} for velocity or Eq.~\eqref{eq:Pressure Interpolation} for pressure:
+The line drawn between the BI and GN will be perpendicular to the tangent line at the BI.
+That line is then mirrored over the surface to find the IP, indicated by the solid triangle. 
+\begin{figure}[htb]
+	\centering
+	\includestandalone[width=0.5\linewidth]{GN_interp_figure}
+	\caption{A detailed schematic of field value extrapolation to a ghost node.}
+	\label{fig:Ghost node extrapolation}
+\end{figure}
+The four field values surrounding the IP are used to interpolate for the field value at the IP using equation~\eqref{eq:Interpolation}. 
+If one of the four field values used to calculate the IP is inside the body, as seen in the extrapolation for GN 1 in Figure~\ref{Fig Ghost node extrapolation}, then that node is moved to the BI and the boundary condition is used.
+If none of the four field values are inside the body as seen in the extrapolation for GN 2 then the node closest to the BI is moved to the BI.
+To satisfy the no slip condition at the body, a Dirichlet boundary condition equal to the body velocity is used when extrapolation for velocity GNs. 
+The Neumann boundary condition, Equation~\eqref{eq:Neumann}, is used to approximate pressure.
+A system of equations is set up to solve for the $a$ coefficients in Equation~\eqref{eq:Interpolation}.
+For velocity, each of the four nodes surrounding the IP form one of the four required equations.
+For pressure, nodes on the body get plugged into Equation~\eqref{eq:Neumann Node}, which is simply the derivative of Equation~\eqref{eq:Interpolation}. 
+\begin{align}
+\phi (x,y) = a_0 + a_1 x + a_2y + a_3 x y \label{eq:Interpolation} \\
+\phi (x,y) = a_1 + a_2 + a_3 (x+y) \label{eq:Neumann Node} \\
+\left. \frac{\partial p}{\partial \textbf{n}}\right|_{BI} = \left. -\rho \frac{D\textbf{u}}{Dt}\cdot \textbf{n}\right|_{BI}
+\label{eq:Neumann}\;.
+\end{align}
+$\phi$ is the variable being interpolated ($u$, $v$, or pressure); $a_0$, $a_1$, $a_2$ and $a_3$ are coefficients, and $x$ and $y$ give the node location.
+$\rho$ is the density, $D\textbf{u}\left/Dt\right.$ is the material derivative, and $\textbf{n}$ is the unit vector normal to the body.
+Solving this system on the GPU requires direct inversions of the $4 \times 4$ matrices.
+This process is elaborated on in \ref{system of euqations}.
+Once the $a$ coefficients have been found, the field value at the IP can be calculated with equation~\eqref{eq:Interpolation} and extrapolated across the surface using equation~\eqref{eq:Velocity Interpolation} for velocity or ~\eqref{eq:Pressure Interpolation} for pressure. 
+$\Delta l$ is the distance from GN to IP.
 \begin{align}
 \textbf{u}_{GN} &= 2\textbf{u}_{BI} - \textbf{u}_{IP} \label{eq:Velocity Interpolation} \\
 p_{GN} &= p_{ip} - \Delta l \left. \frac{\partial p}{\partial \textbf{n}}\right|_{BI} \;, \label{eq:Pressure Interpolation}
 \end{align}
-where $\Delta l$ is the distance from ghost node to image point.
-
-\begin{figure}[htb]
-    \centering
-    \begin{subfigure}{0.3\textwidth}
-        \centering
-        \includestandalone[width=\linewidth]{GN_interp_figure}
-        \caption{Field extrapolation to ghost node}
-    \end{subfigure}
-    ~
-    \begin{subfigure}{0.3\textwidth}
-        \centering
-        \includestandalone[width=\linewidth]{HN_interp_figure}
-        \caption{Hybrid interpolation}
-    \end{subfigure}
-    \caption{A detailed schematic of the hybrid and ghost node interpolations.}
-    \label{fig:Interpolate}
-\end{figure}
 
 \subsection{Interpolation to hybrid nodes}
 \label{Sec:Interpolation}
+\todo[inline]{you are here}
+\begin{figure}[htb]
+	\centering
+	\includestandalone[width=0.5\linewidth]{HN_interp_figure}
+	\caption{A detailed schematic of the hybrid node interpolation.}
+	\label{fig:Interpolate}
+\end{figure}
 
 The field value at the hybrid node is calculated using Eq.~\eqref{eq:Interpolation}.
 The $a_i$ coefficients are calculated using nearby nodes and the boundary condition as seen in Figure~\ref{fig:Interpolate}b.
@@ -232,9 +219,6 @@ The process for finding and calculating the coefficients is similar as for the g
 The main differences are the location of the image point and that the hybrid node will always share a location with one of the interpolation corners.
 The interpolation node that is on top of the hybrid node is moved to the BI.
 
-
-\subsection{Field extrapolation to ghost nodes}
-\subsection{Interpolation to hybrid nodes}
 \subsection{Weighting}\label{Sec:Weighting}
 \section{Luo iter}
 \subsection{intermediate velocity with iter}
@@ -327,5 +311,7 @@ The interpolation node that is on top of the hybrid node is moved to the BI.
 \chapter{Discretization}
 \section{Fadlun}
 \subsection{Fadlun Linear Interpolation}\label{Fadlun Linear Interpolation}
+\section{Luo}
+\subsection{Solving a system of four eqations on the gpu}\label{system of euqations}
 
 \end{document}
