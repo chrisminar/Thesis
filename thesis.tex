@@ -163,29 +163,45 @@ This process is elaborated on in section \ref{Sec:Weighting}
 \subsection{Field extrapolation to ghost nodes}
 \label{Sec:Field Extrapolation}
 
-Field values are extrapolated across the body using the same method as Luo et al.~\cite{Luo:2012gx}.
-The solver uses a staggered grid, unlike Luo et al. which uses a co-located grid, causing the process to have three variations; one for pressure nodes and ones for u and v velocity nodes.
-Field values are first interpolated at an image point (IP) outside the body using the surrounding field values and the boundary condition. Figure~\ref{Fig:Ghost node extrapolation} depicts the extrapolation for two u velocities.
+Navier--Stokes can be used to calculate values at the hybrid nodes if the ghost nodes are modified to correctly represent the presence of the body.
+A simple example of this can be seen in Figure~\ref{Fig: Simple Interpolation}.
+If the slope of velocity between the hybrid node and the body is assumed to be linear then the slope can be extrapolated inwards to the ghost node.
+When Navier--Stokes is then solved, the fluid velocity at the body surface will be calculated as the velocity of the body, mimicking the no slip boundary condition.
+\begin{figure}[htb]
+	\centering
+	\includestandalone[width=0.5\linewidth]{basic_extrapolation}
+	\caption{A simple 1D, linear extrapolation example}
+	\label{Fig: Simple Interpolation}
+\end{figure}
+
+Field values are extrapolated across the body using a 2D bilinear method described in Luo et al.~\cite{Luo:2012gx}.
+Unlike Luo et al., the solver uses a staggered grid, causing the extrapolation process to have three variations; one for pressure nodes and ones for u and v velocity nodes.
+Field values are first interpolated at an image point (IP) outside the body using the surrounding field values and the boundary condition. 
+The 2D bilinear interpolation approximates the field between four nodes surrounding the IP with Equation~\eqref{eq:Interpolation}.
+\todo[inline]{move equation up}
+The four interpolation nodes are used to set up a system of equations to solve for the coefficients, which can then be used to solve for the field values. 
+Some of the interpolation nodes will be moved to account for the presence of the body as seen in Figure~\ref{fig:Ghost node extrapolation}.
+\begin{figure}[htb]
+	\centering
+	\includestandalone[width=0.5\linewidth]{GN_interp_figure}
+	\caption{A detailed schematic u velocity extrapolation to ghost nodes.}
+	\label{fig:Ghost node extrapolation}
+\end{figure}
+
 The ghost nodes(GN), indicated by solid squares, are projected onto the surface to find the body intercept(BI), indicated by the thick open circle.
 \todo[inline]{change diagram to not have two open circles, its confusing}
 Body nodes used to track the body's position are not the same as the BI and the two are typically not coincident.
 If the body has curvature, the body intercept will not fall exactly on the body.
 The line drawn between the BI and GN will be perpendicular to the tangent line at the BI.
 That line is then mirrored over the surface to find the IP, indicated by the solid triangle. 
-\begin{figure}[htb]
-	\centering
-	\includestandalone[width=0.5\linewidth]{GN_interp_figure}
-	\caption{A detailed schematic of field value extrapolation to a ghost node.}
-	\label{fig:Ghost node extrapolation}
-\end{figure}
+
 The four field values surrounding the IP are used to interpolate for the field value at the IP using equation~\eqref{eq:Interpolation}. 
-If one of the four field values used to calculate the IP is inside the body, as seen in the extrapolation for GN 1 in Figure~\ref{Fig Ghost node extrapolation}, then that node is moved to the BI and the boundary condition is used.
+If one of the four interpolation nodes is inside the body, as seen in the extrapolation for GN 1 in Figure~\ref{Fig Ghost node extrapolation}, then that node is moved to the BI and the boundary condition is used.
 If none of the four field values are inside the body as seen in the extrapolation for GN 2 then the node closest to the BI is moved to the BI.
-To satisfy the no slip condition at the body, a Dirichlet boundary condition equal to the body velocity is used when extrapolation for velocity GNs. 
-The Neumann boundary condition, Equation~\eqref{eq:Neumann}, is used to approximate pressure.
+To satisfy the no slip condition at the body, a Dirichlet boundary condition equal to the body velocity is used when extrapolating for velocity GNs. 
+The Neumann Equation~\eqref{eq:Neumann}, is used to approximate the pressure boundary condition.
 A system of equations is set up to solve for the $a$ coefficients in Equation~\eqref{eq:Interpolation}.
-For velocity, each of the four nodes surrounding the IP form one of the four required equations.
-For pressure, nodes on the body get plugged into Equation~\eqref{eq:Neumann Node}, which is simply the derivative of Equation~\eqref{eq:Interpolation}. 
+Pressure nodes on the body use Equation~\eqref{eq:Neumann Node} in the system, which is simply the derivative of Equation~\eqref{eq:Interpolation}. 
 \begin{align}
 \phi (x,y) = a_0 + a_1 x + a_2y + a_3 x y \label{eq:Interpolation} \\
 \phi (x,y) = a_1 + a_2 + a_3 (x+y) \label{eq:Neumann Node} \\
@@ -205,7 +221,14 @@ p_{GN} &= p_{ip} - \Delta l \left. \frac{\partial p}{\partial \textbf{n}}\right|
 
 \subsection{Interpolation to hybrid nodes}
 \label{Sec:Interpolation}
-\todo[inline]{you are here}
+
+Interpolating for the field value at the hybrid node is largely the same as interpolating for the ghost nodes' image point described previously.
+The BI is once again found by projecting the hybrid node along the surface normal.
+The IP is the same distance from the BI to the HN in the opposite direction of the HN as seen in Figure~\ref{fig:Interpolate}.
+The IP is only used to find the four interpolation nodes, one of which will always be the HN.
+The interpolation node coincident with the HN is moved to the BI and the appropriate boundary condition for velocity or pressure is applied.
+Once equation~\eqref{eq:Interpolation} is solved, the hybrid node is interpolated for.
+Details on this process can be found in \ref{a: interpolation to hybrid nodes}
 \begin{figure}[htb]
 	\centering
 	\includestandalone[width=0.5\linewidth]{HN_interp_figure}
@@ -213,15 +236,45 @@ p_{GN} &= p_{ip} - \Delta l \left. \frac{\partial p}{\partial \textbf{n}}\right|
 	\label{fig:Interpolate}
 \end{figure}
 
-The field value at the hybrid node is calculated using Eq.~\eqref{eq:Interpolation}.
-The $a_i$ coefficients are calculated using nearby nodes and the boundary condition as seen in Figure~\ref{fig:Interpolate}b.
-The process for finding and calculating the coefficients is similar as for the ghost node process described previously.
-The main differences are the location of the image point and that the hybrid node will always share a location with one of the interpolation corners.
-The interpolation node that is on top of the hybrid node is moved to the BI.
+\subsection{Weighting}
+\label{Sec:Weighting}
 
-\subsection{Weighting}\label{Sec:Weighting}
-\section{Luo iter}
-\subsection{intermediate velocity with iter}
+To dampen numerical oscillations, Luo et al.~\cite{Luo:2012gx} introduced a smooth transition between solution regimes at the body instead of a Dirac-delta-type function of traditional direct forcing.
+The scalar $\alpha$ is introduced to the solutions for intermediate velocity and the pressure:
+\begin{equation}\label{eq:Weight}
+\theta = \left(1-\alpha \right)\theta_{Navier-Stokes} + \alpha \theta_{Interpolated} \;,
+\end{equation}
+where $\theta$ represents either intermediate velocity or pressure.
+Transitioning between the Navier--Stokes and interpolated solutions should meet three criteria:
+\begin{enumerate}
+	\item Hybrid nodes farther from the body should favor the Navier-Stokes solution ($\alpha \rightarrow 0$ as distance $\uparrow$).
+	\item Hybrid nodes closer to the body should favor the interpolated solution ($\alpha \rightarrow 1$ as distance $ \rightarrow 0$).
+	\item The weighting function should be smooth and continuous as the hybrid node moves away from the body.
+\end{enumerate}
+To solve for $\alpha$, it is assumed that each hybrid node has at most two neighboring ghost nodes (this will not be true for sharp corners):
+\begin{equation}
+\alpha = \sqrt{\left(\frac{\Delta_1}{\Delta x}\right)^2 + \left(\frac{\Delta_2}{\Delta y}\right)^2} \;.
+\label{eq:Alpha}
+\end{equation}
+where $\Delta_1$ and $\Delta_2$ correlate to GN$_1$ and GN$_2$, respectively, and $\Delta x$ and $\Delta y$ are the grid spacing in the $x$ and $y$ directions, respectively.
+As described in Luo et al. and shown in Figure~\ref{fig:Weight}, $\Delta_1$ and $\Delta_2$ are the closest distances between the body and the $x$ and $y$ ghost nodes, respectively.
+If the hybrid node only has one neighbor, then $\Delta=0$ for the other direction.
+\begin{figure}[htb]
+	\centering
+	\includestandalone[width=0.5\textwidth]{alpha_figure}
+	\caption{Schematic of the calculation of $\alpha$ for u velocity nodes.}
+	\label{fig:Weight}
+\end{figure}
+
+\section{Putting it all together}
+\label{putting it all together}
+
+Luo et al. did not describe exactly where all this interpolating and extrapolating takes place.
+It is a bit confusing where and when values should be extrapolated and interpolated.
+We tried doing it two ways.
+The first way more closely follows the work of Luo et al.\cite{luo:2012gx} which says to perform the interpolations, extrapolations and weighting inside of the linear algebra solutions for the intermediate velocity and pressure. 
+We also tried to resolve the time step in a non-iterative manner by calculating the interpolations, extrapolations and weighting outside of the linear algebra. 
+\subsection{Iterative solution}
 \subsection{poisson with iter}
 
 
@@ -313,5 +366,6 @@ The interpolation node that is on top of the hybrid node is moved to the BI.
 \subsection{Fadlun Linear Interpolation}\label{Fadlun Linear Interpolation}
 \section{Luo}
 \subsection{Solving a system of four eqations on the gpu}\label{system of euqations}
+\subsection{a: interpolation to hybrid nodes}
 
 \end{document}
