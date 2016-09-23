@@ -266,50 +266,71 @@ If the hybrid node only has one neighbor, then $\Delta=0$ for the other directio
 	\label{fig:Weight}
 \end{figure}
 
-\section{Putting it all together}
+\subsection{Putting it all together}
 \label{putting it all together}
 
 Luo et al. did not describe exactly where all this interpolating and extrapolating takes place.
 It is a bit confusing where and when values should be extrapolated and interpolated.
 We tried doing it two ways.
 The first way more closely follows the work of Luo et al.\cite{luo:2012gx} which says to perform the interpolations, extrapolations and weighting inside of the linear algebra solutions for the intermediate velocity and pressure. 
+Field values will solved by plugging in Equations~\eqref{eq:Intermediate Velocity} or \eqref{eq:Poisson} and \eqref{eq:Interpolation} into Equation~\eqref{eq:Weight}. 
+The discretization of these can be seen in section \ref{ID:Iterative}.
 We also tried to resolve the time step in a non-iterative manner by calculating the interpolations, extrapolations and weighting outside of the linear algebra. 
-\subsection{Iterative solution}
-\subsection{poisson with iter}
-
+The order is setup such that a value is interpolated or extrapolated just before it is needed for the subsequent step.
+We came up with the following sequence that is elaborated on in section \ref{ID:Serial}:
+\begin{enumerate}
+	\item Identify all nodes as hybrid, ghost, fluid or solid.
+	\item Extrapolate u and v velocity values to ghost nodes.
+	\item Interpolate for u and v velocities at hybrid nodes.
+	\item Calculate right hand side for the intermediate velocity solution.
+	\item Solve for intermediate velocity.
+	\item Weight the two intermediate velocity solutions.
+	\item Extrapolate intermediate velocities to ghost nodes.
+	\item Calculate right hand side for the Poisson equation.
+	\item Solve the Poisson equation.
+	\item Interpolate for pressure at hybrid nodes.
+	\item Weight the two pressure solutions.
+	\item Extrapolate pressure to ghost nodes.
+	\item Update velocity.
+	\item Advance time.
+\end{enumerate}
 
 \chapter{Implementaiton and Discretization}\label{Implementation}
+
+This chapter will detail the discretization of the immersed boundary method and the implementation on the GPU. 
+
+\section{GPU implementation strategy}
+\section{Grid Staggering}
+\section{Node Identification}
+\section{Force Calculation}
+\subsection{Control Volume}
+\subsection{Direct}
+\section{Preconditioning and Linear Algebra Solvers}
 \section{Navier--Stokes}
 \subsection{Intermediate velocity}
 \subsubsection{Advection}
-\subsubsection{diffusion}
-\subsubsection{LHS1}
-\subsubsection{boundaries}
+\subsubsection{Diffusion}
+\subsubsection{Boundary Terms}
+\subsubsection{Left Side Matrix}
 \subsection{Poisson}
-\subsubsection{rhs discretization}
-\subsubsection{LHS2}
+\subsubsection{Right Side Matrix}
 \subsubsection{BC}
-\section{Fadlun}
+\subsubsection{Left Side Matrix}
+\section{Fadlun Immersed Boundary Method}
 \subsection{other body stuff?}
-\subsection{intermediate velocity}
-\subsubsection{interpolation}
-\subsubsection{changes to LHS1} 
-\subsubsection{changes to rhs1}
-\section{Luo}
+\subsection{Intermediate Velocity}
+\subsubsection{Interpolation}
+\subsubsection{Left Side Matrix} 
+\section{Luo Immersed Boundary Method}
+\section{Serial Solution}\label{ID:Serial}
 \subsection{Field extrapolation to ghost nodes}
 \subsection{Interpolation to hybrid nodes}
 \subsection{Weighting}
 \subsection{Full time step}
-\section{Luo iter}
-\subsection{intermediate velocity with iter}
-\subsection{poisson with iter}
-\subsection{Full time step}
-\section{GPU implementation strategy}
-\section{staggered}
-\section{tag points}
-\section{Calc force}
-\section{luo force}
-\section{solver type and preconditioner issues}
+\section{Iterative Solution}\label{ID:Iterative}
+\subsection{Intermediate Velocity}\label{ID:Iterative Intermediate Velocity}
+\subsection{Poisson}\label{ID:Iterative Poisson}
+
 
 \chapter{Validation and Verification}\label{Validation}
 \section{Lid Driven Cavity}
