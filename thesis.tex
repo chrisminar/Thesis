@@ -207,7 +207,7 @@ The line drawn between the BI and GN will be perpendicular to the tangent line a
 That line is then mirrored over the surface to find the IP, indicated by the solid triangle. 
 
 The four field values surrounding the IP are used to interpolate for the field value at the IP using equation~\eqref{eq:Interpolation}. 
-If one of the four interpolation nodes is inside the body, as seen in the extrapolation for GN 1 in Figure~\ref{Fig Ghost node extrapolation}, then that node is moved to the BI and the boundary condition is used.
+If one of the four interpolation nodes is inside the body, as seen in the extrapolation for GN 1 in Figure~\ref{fig:Ghost node extrapolation}, then that node is moved to the BI and the boundary condition is used.
 If none of the four field values are inside the body as seen in the extrapolation for GN 2 then the node closest to the BI is moved to the BI.
 To satisfy the no slip condition at the body, a Dirichlet boundary condition equal to the body velocity is used when extrapolating for velocity GNs. 
 The Neumann Equation~\eqref{eq:Neumann}, is used to approximate the pressure boundary condition.
@@ -239,7 +239,7 @@ The IP is the same distance from the BI to the HN in the opposite direction of t
 The IP is only used to find the four interpolation nodes, one of which will always be the HN.
 The interpolation node coincident with the HN is moved to the BI and the appropriate boundary condition for velocity or pressure is applied.
 Once equation~\eqref{eq:Interpolation} is solved, the hybrid node is interpolated for.
-Details on this process can be found in \ref{a: interpolation to hybrid nodes}
+Details on this process can be found in \ref{a: interpolation to hybrid nodes}.
 \begin{figure}[htb]
 	\centering
 	\includestandalone[width=0.5\linewidth]{HN_interp_figure}
@@ -283,7 +283,7 @@ If the hybrid node only has one neighbor, then $\Delta=0$ for the other directio
 Luo et al. did not describe exactly where all this interpolating and extrapolating takes place.
 It is a bit confusing where and when values should be extrapolated and interpolated.
 We tried doing it two ways.
-The first way more closely follows the work of Luo et al.\cite{luo:2012gx} which says to perform the interpolations, extrapolations and weighting inside of the linear algebra solutions for the intermediate velocity and pressure. 
+The first way more closely follows the work of Luo et al.\cite{Luo:2012gx} which says to perform the interpolations, extrapolations and weighting inside of the linear algebra solutions for the intermediate velocity and pressure. 
 Field values will solved by plugging in Equations~\eqref{eq:Intermediate Velocity} or \eqref{eq:Poisson} and \eqref{eq:Interpolation} into Equation~\eqref{eq:Weight}. 
 The discretization of these can be seen in section \ref{ID:Iterative}.
 We also tried to resolve the time step in a non-iterative manner by calculating the interpolations, extrapolations and weighting outside of the linear algebra. 
@@ -346,7 +346,7 @@ A staggered grid stores scalar values(pressure, temperature, density etc.) at th
 Staggered grids also do not require a pressure boundary condition.
 \todo[inline]{is this true?}
 Figure~\ref{fig:stagger} shows how the grid is staggered.
-It is worth noting that Luo et al.\cite{luo:2010gx} uses a collocated grid.
+It is worth noting that Luo et al.\cite{Luo:2012gx} uses a collocated grid.
 Due to the sensitivity of immersed boundary methods near the body, this will cause some difference.
 There is no theoretical reason, however, why the numerical suppression method will not work on a staggered grid.
 \begin{figure}[htb]
@@ -454,5 +454,6 @@ There is no theoretical reason, however, why the numerical suppression method wi
 \section{Luo}
 \subsection{Solving a system of four eqations on the gpu}\label{system of euqations}
 \subsection{a: interpolation to hybrid nodes}
+\label{a: interpolation to hybrid nodes}
 
 \end{document}
