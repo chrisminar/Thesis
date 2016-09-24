@@ -29,6 +29,17 @@ We also thank the Barba Group for developing, maintaining, and distributing thei
 \usepackage{graphicx} %needed for subfigure
 \usepackage{float,caption,subcaption} %figure stuff
 \graphicspath{{./figure/}} %figure path
+\usepackage{siunitx}
+\sisetup{group-separator={,},
+	detect-all,
+	binary-units,
+	list-units = single,
+	range-units = single,
+	tophrase = --,
+	per-mode = symbol-or-fraction,
+	separate-uncertainty = true,
+	list-final-separator = {, and }
+}
 
 
 \begin{document}
@@ -297,15 +308,70 @@ We came up with the following sequence that is elaborated on in section \ref{ID:
 
 \chapter{Implementaiton and Discretization}\label{Implementation}
 
-This chapter will detail the discretization of the immersed boundary method and the implementation on the GPU. 
+This chapter will detail the discretization of the immersed boundary method and implementation on the GPU. 
 
 \section{GPU implementation strategy}
+\label{GPU implementation strategy}
+\todo[inline]{store everything on the gpu}
+\todo[inline]{all calculations on the gpu}
+\todo[inline]{no transferring data}
+\todo[inline]{don't optimize things other than poisson eq}
+\todo[inline]{this hasn't been edited from the paper yet}
+
+We developed our solver for full GPU operation to improve performance relative to CPU-based algorithms.
+To this end, several overarching strategies have been implemented.
+First, all calculations are performed on the GPU, and all data is stored on the GPU.
+Typically, efforts are taken to avoid thread divergence when writing code for a GPU.
+We found it favorable to write kernels with occasionally poor thread-parallel performance, i.e., kernels with significant divergence, rather than copying data to the host to do calculations to reduce divergence.
+In our experiences, transferring data back and forth took significantly more time than would be saved by running some operations on a CPU.
+This was particularly relevant when moving from a stationary body to a moving body.
+When simulating a stationary body, several calculations only need to be performed once, such as the left side matrices or node identification.
+When simulating a moving body, these values need to be recalculated every time step, causing a total computational cost for each nearly as high as the Poisson equation solve (typically the most expensive step).
+This relates to the second strategy: evaluate algorithm performance compared to the Poisson equation.
+Increasing the parallel performance of kernels has little effect on the overall solver performance because solving the Poisson equation typically takes more than \SI{90}{\percent} of the total computational time.
+
+The third strategy comes from Layton et al.~\cite{layton2011cuibm}.
+When using the Cusp library to perform the multigrid method, creating the preconditioner can take as much time as solving the Poisson equation.
+In a moving-body simulation, the preconditioner is normally recalculated each time step, but Layton et al.~\cite{layton2011cuibm} found it possible to skip some time steps without loss of fidelity.
+Here, we recalculate the preconditioner only if solution of the previous time step required more than 100 iterations.
+
 \section{Grid Staggering}
+\label{Grid Staggering}
+
+A collocated grid stores all variable information at the center of each cell.
+When discretized on a collocated grid, Navier--Stokes will yield an odd-even decoupling of pressure an velocity resulting in a checkerboard pattern. 
+\todo[inline]{findsource for this info}
+Using a staggered grid is a relatively straightforward way to avoid odd-even decoupling.
+A staggered grid stores scalar values(pressure, temperature, density etc.) at the cell center and velocities at the cell face. 
+Staggered grids also do not require a pressure boundary condition.
+\todo[inline]{is this true?}
+Figure~\ref{fig:stagger} shows how the grid is staggered.
+It is worth noting that Luo et al.\cite{luo:2010gx} uses a collocated grid.
+Due to the sensitivity of immersed boundary methods near the body, this will cause some difference.
+There is no theoretical reason, however, why the numerical suppression method will not work on a staggered grid.
+\begin{figure}[htb]
+	\centering
+	\includestandalone[width=0.5\textwidth]{grid_stagger}
+	\caption{Grid staggering: The velocities are staggered in the positive x and y directions.}
+	\label{fig:stagger}
+\end{figure}
+
 \section{Node Identification}
+\todo[inline]{find krishnan paper to reference}
+\todo[inline]{find algorithm to reference}
+
 \section{Force Calculation}
-\subsection{Control Volume}
-\subsection{Direct}
+\label{Force Calculation}
+\todo[inline]{find reference to control volume approach}
+\todo[inline]{write control volume approach}
+\todo[inline]{write luo et al approach}
+\todo[inline]{find reference to original luo approach}
+
 \section{Preconditioning and Linear Algebra Solvers}
+\label{Preconditioning and Linear Algebra Solvers}
+\todo[inline]{talk about cusp}
+\todo[inline]{talk about the preconditioners}
+\todo[inline]{talk about multi grid methods}
 \section{Navier--Stokes}
 \subsection{Intermediate velocity}
 \subsubsection{Advection}
