@@ -373,8 +373,47 @@ There is no theoretical reason, however, why the numerical suppression method wi
 \todo[inline]{talk about the preconditioners}
 \todo[inline]{talk about multi grid methods}
 \section{Navier--Stokes}
-\subsection{Intermediate velocity}
-\subsubsection{Advection}
+\label{ID:Navier Stokes}
+
+The 2D incompressible Navier--Stokes equation forms the backbone of the immersed boundary method.
+To solve Navier--Stokes, the fractional step method is used.
+In the first step, Equation~\eqref{eq:Incompressible NavierStokes} drops the pressure term and is discretized to get an intermediate velocity.
+
+\subsection{Intermediate Velocity}
+\begin{equation}
+\frac{\partial \textbf{u}}{\partial t} + \nabla ( \textbf{uu} ) = -\nabla p + \nu\nabla^{2}\textbf{u} \label{eq:Incompressible NavierStokes}
+\end{equation}
+The advection term, $\nabla (\textbf{uu})$, is discretized in time using explicit, second-order Adams-Bashforth.
+Diffusion, $\nu \nabla^2 \textbf{u}$, is discretized using Crank-Nicolson.
+The result is an expanded form of Equation\eqref{eq:Intermediate Velocity}, Equation~\eqref{eq:Expanded Intermediate Velocity}.
+\begin{equation}
+\label{eq:Expanded Intermediate Velocity}
+\hat{\textbf{u}} - \frac{\Delta t}{2}L(\hat{\textbf{u}}) = \textbf{u}^n + \Delta t\left(0.5L(\textbf{u}^n) - 1.5N(\textbf{u}^n) + 0.5N(\textbf{u}^{n-1}) + BC\right)
+\end{equation}
+Where $N$ is the advection operator, $L$ is the diffusion Laplacian operator and BC is the boundary condition term.
+\subsubsection{Advection}\label{ID: Advection}
+The advection term, expands to become Equations~\eqref{eq: Advection 1} and~\eqref{eq: Advection 2}. 
+Because the grid is staggered, the discretization of Equations~\eqref{eq: Advection 1} and~\eqref{eq: Advection 2} are slightly different.
+For simplicity only the discretization of the u equation will be shown.
+Note that $u$ and $v$ represent scalar velocity and $\textbf{u}$ is vector velocity.
+\begin{align}
+u\frac{\partial u}{\partial x} + v\frac{\partial u}{\partial y} \label{eq: Advection 1} \\ 
+u\frac{\partial v}{\partial x} + v\frac{\partial v}{\partial y} \; \label{eq: Advection 2}
+\end{align}
+Discretizing on a uniform grid using second order central differencing results in Equation \eqref{eq: discretized uniform advection}.
+Figure~\ref{fig:discretized uniform advection} shows a uniform grid.
+\begin{figure}[htb]
+	\centering
+	\includestandalone[width=0.5\textwidth]{advection_discretization}
+	\caption{A uniform grid reference to be used with Equation~\eqref{eq: discretized uniform advection}}
+	\label{fig:discretized uniform advection}
+\end{figure}
+\begin{equation}
+u_{i,j}\frac{u_{i+1,j} - u_{i-1,j}}{2dx} + \frac{v_{i,j} + v_{i+1,j} + v_{i,j-1} + v_{i+1,j-1}}{4}\frac{u_{i,j+1} - u_{i,j-1}}{2dy} \label{eq: discretized uniform advection}
+\end{equation}
+
+\todo[inline]{figure out how to align}
+
 \subsubsection{Diffusion}
 \subsubsection{Boundary Terms}
 \subsubsection{Left Side Matrix}
