@@ -397,8 +397,8 @@ Because the grid is staggered, the discretization of Equations~\eqref{eq: Advect
 For simplicity only the discretization of the u equation will be shown.
 Note that $u$ and $v$ represent scalar velocity and $\textbf{u}$ is vector velocity.
 \begin{align}
-u\frac{\partial u}{\partial x} + v\frac{\partial u}{\partial y} \label{eq: Advection 1} \\ 
-u\frac{\partial v}{\partial x} + v\frac{\partial v}{\partial y} \; \label{eq: Advection 2}
+&u\frac{\partial u}{\partial x} + v\frac{\partial u}{\partial y} \label{eq: Advection 1} \\ 
+&u\frac{\partial v}{\partial x} + v\frac{\partial v}{\partial y} \; \label{eq: Advection 2}
 \end{align}
 Discretizing on a uniform grid using second order central differencing results in Equation \eqref{eq: discretized uniform advection}.
 Figure~\ref{fig:discretized uniform advection} shows a uniform grid.
@@ -412,10 +412,60 @@ Figure~\ref{fig:discretized uniform advection} shows a uniform grid.
 u_{i,j}\frac{u_{i+1,j} - u_{i-1,j}}{2dx} + \frac{v_{i,j} + v_{i+1,j} + v_{i,j-1} + v_{i+1,j-1}}{4}\frac{u_{i,j+1} - u_{i,j-1}}{2dy} \label{eq: discretized uniform advection}
 \end{equation}
 
-\todo[inline]{figure out how to align}
+A non-uniform grid requires a little more involved discretization. 
+If $\Delta x_{i+1}$ does not equal $\Delta x$ then $\frac{\partial u}{\partial x}$ must be calculated at the cell centers, $p_{i,j}$ and $p_{i+1,j}$, then interpolated to $u_{i,j}$. 
+\todo[inline]{add figure and equation for dudx interp}
+In addition, $v$ will be bilinearly interpolated for at $u_{i,j}$.
+Figure~\ref{fig:bi-linear-interpolation} shows a schematic of bilinear interpolation.
+First, $v$ at 1 and 2 are linearly interpolated for using Equations \eqref{eq:bili 1} and \eqref{eq:bili 2}.
+Then $v_1$ and $v_2$ are used to linearly interpolated for $v$ at $u_{i,j}$ using Equation \eqref{eq:bili 3}.
+\begin{align}
+v_1 &\approx \frac{x_2 - x}{x_2 - x_1}v_{i,j} + \frac{x - x_1}{x_2 - x_1}v_{i+1,j} \label{eq:bili 1} \\
+v_2 &\approx \frac{x_2 - x}{x_2 - x_1}v_{i,j-1} + \frac{x - x_1}{x_2 - x_1}v_{i+1,j-1} \label{eq:bili 2} \\
+v_x &\approx \frac{y_2 - y}{y_2 - y_1}v_{1} + \frac{y - y_1}{y_2 - y_1}v_{2} \; \label{eq:bili 3}
+\end{align}
+\begin{figure}[htb]
+	\centering
+	\includestandalone[width=0.5\textwidth]{bi-linear_interpolation}
+	\caption{Non-uniform bi linear interpolation.}
+	\label{fig:bi-linear-interpolation}
+\end{figure}
 
 \subsubsection{Diffusion}
+The diffusion term, $\nu \nabla^2 \textbf{u}$, expands to become Equations \eqref{eq:ID Diffusion x} and \eqref{eq:ID Diffusion y} for the u and v momentum equations, respectively.
+\begin{align}
+& \frac{1}{Re}\left(\frac{\partial^2 u}{\partial x^2} + \frac{\partial^2 u}{\partial y^2}\right)\label{eq:ID Diffusion x} \\
+& \frac{1}{Re}\left(\frac{\partial^2 v}{\partial x^2} + \frac{\partial^2 v}{\partial y^2}\right)\; \label{eq:ID Diffusion y}
+\end{align}
+$\nu$ can be simplified to 1 over the Reynolds number so long as the characteristic velocity is 1. 
+As with advection, the discretization for \eqref{eq:ID Diffusion x} and \eqref{eq:ID Diffusion y} are different because they are computed at the u and v nodes.
+The discretization is also more complex when done on a non-uniform grid.
+Equation \eqref{eq:ID Diffusion 1} is \eqref{eq:ID Diffusion x} discretized over a uniform grid.
+\begin{equation}
+\frac{u_{i+1,j} + u_{i-1,j} + u_{i,j+1} + u_{i,j-1} - 4u_{i,j}}{\Delta^2}\label{eq:ID Diffusion 1}
+\end{equation} 
+To discretize over an non-uniform grid like that in Figure \ref{fig:ID diffusion} the terms in Equation \eqref{eq:ID Diffusion x} are expanded.
+For example $\frac{\partial^2 u}{\partial x^2}$ will become $\frac{\partial}{\partial x}\left(\frac{\partial u}{\partial x}\right)$.
+The partial derivative of $u$ with respect to $x$ is calculated at the cell centers adjacent to $u_{i,j}$ and the partial derivative of that is taken with respect to $x$ at $u_{i,j}.$
+For simplicity, only the discretization of $\frac{\partial^2 u}{\partial x^2}$ is show in Equation \eqref{eq:ID Diffusion 2} for a non-uniform grid because the discretization of $\frac{\partial^2 u}{\partial y^2}$ follows the same pattern.
+\begin{equation}
+\frac{u_{i+1,j} - u_{i,j}}{dx_{i+1}(dx_{i+1}+dx_i)0.5} + \frac{u_{i-1,j} - u_{i,j}}{dx_{i}(dx_{i+1}+dx_i)0.5}
+\label{eq:ID Diffusion 2}
+\end{equation}
+\begin{figure}[htb]
+	\centering
+	\includestandalone[width=0.5\textwidth]{Diffusion_discretization}
+	\caption{Non-uniform discretization example of the diffusion term.}
+	\label{fig:ID diffusion}
+\end{figure}
+
 \subsubsection{Boundary Terms}
+\begin{figure}[htb]
+	\centering
+	\includestandalone[width=0.5\textwidth]{bc_discretization}
+	\caption{North-East Boundary Condition Discretization.}
+\end{figure}
+\todo[inline]{show how being at the boundary effects diffusion and advection}
 \subsubsection{Left Side Matrix}
 \subsection{Poisson}
 \subsubsection{Right Side Matrix}
