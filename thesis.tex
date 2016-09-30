@@ -431,7 +431,7 @@ v_x &\approx \frac{y_2 - y}{y_2 - y_1}v_{1} + \frac{y - y_1}{y_2 - y_1}v_{2} \; 
 	\label{fig:bi-linear-interpolation}
 \end{figure}
 
-\subsubsection{Diffusion}
+\subsubsection{Diffusion}\label{ID:Diffusion}
 The diffusion term, $\nu \nabla^2 \textbf{u}$, expands to become Equations \eqref{eq:ID Diffusion x} and \eqref{eq:ID Diffusion y} for the u and v momentum equations, respectively.
 \begin{align}
 & \frac{1}{Re}\left(\frac{\partial^2 u}{\partial x^2} + \frac{\partial^2 u}{\partial y^2}\right)\label{eq:ID Diffusion x} \\
@@ -460,14 +460,75 @@ For simplicity, only the discretization of $\frac{\partial^2 u}{\partial x^2}$ i
 \end{figure}
 
 \subsubsection{Boundary Terms}
+At the boundary, special attention must be paid to the advection and diffusion discretization.
+There different problems that are encountered at the boundary will be discussed using the discretization of the advection and diffusion terms from the u-momentum equation, Equations \eqref{eq: Advection 1} and \eqref{eq:ID Diffusion x}.
+Figure \ref{fig:ID iv bc} shows the grid relevant for this discretization at the north west boundary. 
+The problems associated with being near are all based on trying to access values that are out of bounds.
+This issue pops up with several flavors.
+The first is trying to access a velocity value that is on the boundary edge.
+For example, if we tried to calculated $\frac{\partial u}{\partial x}$ at $u_{i,j}$ from the advection term, $u_{i+1,j}$ will be accessed and that value isn't stored in the $u$ velocity matrix.
+The solver uses Dirichlet and convective boundary conditions for velocity.
+If an edge uses a convective boundary condition, that velocity gets calculated before the time step starts so that the rest of the solver can treat it as a Dirichlet boundary condition.
+\todo[inline]{add section and reference to the robin bc}
+When the solver encounters a value it needs on the boundary edge, it pulls a velocity value for that edge from a separate array.
+That velocity value is typically the free stream velocity, or zero.
+
+The second type of issue that occurs is trying to access at velocity value that is outside of the boundary. 
+For example if $\frac{\partial^2 u}{\partial y^2}$ from the diffusion term is calculated at $u_{i,j}$ it needs a value from $u_{i,j+1}$, which is outside the boundary.
+This inadvertently shows the third issue brought about by the need of $dy_j$, where is $u_{i,j+1}$ located?
+For a uniform grid this is strait forward, simply travel $0.5dx$ or $0.5dy$ away from the boundary.
+The solver treats stretched grids the same way effectively not stretching for the node outside of the boundary, e.g. in Figure \ref{fig:ID iv bc} $u_{i,j+1}$ will be located $0.5dy_j$ above the northern boundary.
+
+Once the position is known, the outlying velocity is approximated by assuming the derivative of velocity is constant at the boundary. 
+The linear extrapolation in Equation \eqref{eq:bc extrapolation} simplifies to a relation for the outlying velocity in terms of known values, Equation \eqref{eq:bc extrapolation simplified}.
+
+\begin{align}
+u_{bc} &= \frac{u_{i,j+1} - u_{i,j}}{dy_j}0.5dy_j+ u_{i,j} \label{eq:bc extrapolation} \\
+u_{i,j+1} &= 2u_{bc} - u_{i,j} \; \label{eq:bc extrapolation simplified}
+\end{align}
+
 \begin{figure}[htb]
 	\centering
 	\includestandalone[width=0.5\textwidth]{bc_discretization}
 	\caption{North-East Boundary Condition Discretization.}
+	\label{fig:ID iv bc}
 \end{figure}
 \todo[inline]{show how being at the boundary effects diffusion and advection}
+\todo[inline]{it seems like dyj placement is wrong, fix it}
 \subsubsection{Left Side Matrix}
+The left hand side of the intermediate velocity Equation \eqref{eq:Intermediate Velocity} is restated here. 
+The discretization of the Laplacian term is the same as described in the diffusion section, \ref{ID:Diffusion}. 
+Because both the $u$ and $v$ velocities are stored in the same array, the left side matrix will be size (nx-1)*ny + (ny-1)*nx. 
+nx and ny represent the number of cells in the x and y directions, respectively.
+The "-1" is a bi product of the grid staggering.
+Each row in the matrix corresponds to one velocity node.
+Most of the rows will have five non-zero columns, one for the north, east, south, west and center velocity nodes.
+Rows that represent a velocity node on the edge of the domain will only have four non-zero columns and rows that represent a corner velocity will only have three.
+\begin{equation}
+\hat{\textbf{u}} - \frac{\Delta t}{2}L(\hat{\textbf{u}})
+\end{equation}
 \subsection{Poisson}
+The Poisson equation is the most computationaly intensive step, typically taking more than 90\% of the total run time.
+If Equation \eqref{eq:Poisson} is discretized, a pressure boundary condition is needed.
+Instead, the velocity reconstruction equation, \eqref{eq:Projection}, and the continuity equation, \eqref{eq:Continuity}, are combined.
+When simplified at a non boundary node, the two equations become the Poisson equation.
+When at a boundary, the segment of code that would use a pressure term outside the domain is replaced by $u^{n+1}$, eliminating the need for a pressure boundary condition.
+
+The discretized continuity equation \eqref{eq:discretized continuity} is shown alongside a discretized velocity reconstruction for $\hat{u}_{i+1,j}$, Equation \eqref{eq:discretized projection}.
+The other velocities used in the continuity equation are discretized in the same way. 
+In the reference Figure \ref{fig:ID poisson}, $u_{i,j}^{n+1}$ is not substituted for.
+Instead, the Dirichlet boundary condition velocity is used.
+\begin{align}
+\frac{u_{i,j}^{n+1} - u_{i-1,j}^{n+1}}{dx_i} + \frac{v_{i,j}^{n+1} - v_{i,j-1}^{n+1}}{dy_i} = 0 \label{eq:discretized continuity} \\
+u_{i,j}^{n+1} = \hat{u} - \frac{p_{i+1,j}^{n+1} - p_{i,j}^{n+1}}{dx_i + dx_{i+1}}2\Delta t \; \label{eq:discretized projection}
+\end{align}
+\begin{figure}
+	\centering
+	\includestandalone[width=0.5\textwidth]{poisson_discretization}
+	\caption{A discretization of the Poisson equation at the eastern boundary}
+	\label{fig:ID poisson}
+\end{figure}
+
 \subsubsection{Right Side Matrix}
 \subsubsection{BC}
 \subsubsection{Left Side Matrix}
