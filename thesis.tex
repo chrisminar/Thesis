@@ -380,6 +380,7 @@ To solve Navier--Stokes, the fractional step method is used.
 In the first step, Equation~\eqref{eq:Incompressible NavierStokes} drops the pressure term and is discretized to get an intermediate velocity.
 
 \subsection{Intermediate Velocity}
+\label{ID:NS intermediate velocity}
 \begin{equation}
 \frac{\partial \textbf{u}}{\partial t} + \nabla ( \textbf{uu} ) = -\nabla p + \nu\nabla^{2}\textbf{u} \label{eq:Incompressible NavierStokes}
 \end{equation}
@@ -529,14 +530,49 @@ u_{i,j}^{n+1} = \hat{u} - \frac{p_{i+1,j}^{n+1} - p_{i,j}^{n+1}}{dx_i + dx_{i+1}
 	\label{fig:ID poisson}
 \end{figure}
 
-\subsubsection{Right Side Matrix}
-\subsubsection{BC}
-\subsubsection{Left Side Matrix}
 \section{Fadlun Immersed Boundary Method}
-\subsection{other body stuff?}
+When at an immersed body, the Navier--Stokes equation needs some additional treatment to correctly represent a body. 
+This section will detail the implementation of the Fadlun et al. approach to dealing with the immersed boundary.\todo{cite}
 \subsection{Intermediate Velocity}
-\subsubsection{Interpolation}
-\subsubsection{Left Side Matrix} 
+The interpolation that enforces the no slip condition happens in the intermediate velocity step. 
+\todo{whyis htis possible?}
+To solve for intermediate velocity, the right hand side is computed like there was no body as shown in section \ref{ID:NS intermediate velocity}.
+Then, the hybrid nodes are replaced with interpolation values.
+The direction of interpolation is chosen by the point identification algorithm before the time step.
+In general, when the slope of the body is more vertical the interpolation will be along the x direction.
+The algorithm prefers to interpolate along the x direction as well, i.e. it will only interpolate along the y direction if it can't interpolate along the x direction.
+Figure \ref{fig:ID linear interpolation} shows an example of the linear interpolation at the boundary.
+Equation \eqref{eq:ID intermediate velocity interpolation} shows the interpolation reworked to fit into established matrices used to solve for intermediate velocity.
+The terms inside the brackets represent the left side matrix.
+It proved to be somewhat difficult to write a GPU kernel to edit the sparse left side matrix to incorporate the interpolation.
+Instead of creating the left side matrix for Navier--Stokes then editing it for the IBM as was done with the right side, a seperate kernal was written to calculate the matrix for the Fadlun et al. method.
+
+\begin{equation}
+\left[1\right]u_{i+1,j} + \left[-\frac{b}{a}\right]u_{i,j} = \left(1-\frac{b}{a}\right)u_{body}
+\label{eq:ID intermediate velocity interpolation}
+\end{equation}
+
+\begin{figure}[htb]
+	\centering
+	\includestandalone[width=0.5\textwidth]{linear_interpolation}
+	\caption{Linear interpolation to enforce no slip condition at the boundary.}
+	\label{fig:ID linear interpolation}
+\end{figure}
+
+\subsection{Poisson}
+Fadlun et al. does not modify the Poisson equation at all.
+When testing the Fadlun et al. method with an impulsively started cylinder we found that it failed to correctly predict the drag.
+\todo{explain why it doens't really work better}
+By modifying the intermediate velocity at the boundary without compensating for it the continuity equation is not satisfied.
+This error creates a mass source or sink at each hybrid node. 
+In certain flows, the lack of mass continuity will cause the solver to poorly predict the flow or be unstable.
+There are many ways researchers have tried to fix this.
+\todo{list ways to fix this}
+The solver handles this problem with a psuedo sharp interface method. 
+If any of the terms from Equation \eqref{eq:discretized projection} are inside of the boundary it is assumed that $u_{i,j}^{n+1}$ is close enough to the body to approximate it as the body velocity.
+If the body passes through the cell, $dx_i$ and or $dy_j$ from Equation \eqref{eq:discretized continuity} are shortened to appropriately measure the new cell size.
+\todo{should there be some sort of diagram to help illustrate this concept?}
+
 \section{Luo Immersed Boundary Method}
 \section{Serial Solution}\label{ID:Serial}
 \subsection{Field extrapolation to ghost nodes}
