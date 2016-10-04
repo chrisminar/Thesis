@@ -574,61 +574,61 @@ If the body passes through the cell, $dx_i$ and or $dy_j$ from Equation \eqref{e
 \todo{should there be some sort of diagram to help illustrate this concept?}
 
 \section{Luo Immersed Boundary Method}
-\section{Serial Solution}\label{ID:Serial}
-\subsection{Field extrapolation to ghost nodes}
-\subsection{Interpolation to hybrid nodes}
-\subsection{Weighting}
-\subsection{Full time step}
-\section{Iterative Solution}\label{ID:Iterative}
-\subsection{Intermediate Velocity}\label{ID:Iterative Intermediate Velocity}
-\subsection{Poisson}\label{ID:Iterative Poisson}
-
+The code has two solvers based off the work of Luo et al. 
+The key difference between them is when the extrapolation and interpolation takes place. 
+The first solver is closer to the original method. 
+All of the extrapolation and interpolation happens inside of the linear algebra steps. 
+The second solver moves the interpolation and extrapolation outside of the linear algebra as described in section \ref{putting it all together}.
+\subsection{Embedded Interpolation}
+In the embedded interpolation version of Luo et al., the Navier--Stokes and interpolated solutions for field values are calculated and weighted inside each linear algebra step.
+\todo{more here}
+do an example of velocity for interpolation and extrapolation for the rhs and the lhs
+talk about when we do external interps
+\subsection{External Interpolation}
+\todo{more here}
+do the same example
 
 \chapter{Validation and Verification}\label{Validation}
 \section{Lid Driven Cavity}
 \section{Impulsively started cylinder}
-\subsection{luo}
-\subsection{luo iter}
-\subsection{fadlun modified}
-\subsection{fadlun?}
-\section{Static cylinder}
-\subsection{fadlun modified}
-\subsection{luo}
-\subsection{luo iter}
-\section{osc cylinder}
-\subsection{fadlunmodified}
-\subsection{luo}
-\subsection{luo iter}
-\section{viv}
-\subsection{fadlun modified}
-\subsection{luo}
-\subsection{luo iter}
-\chapter{conclusions}
-\chapter{future work}
+\subsection{Fadlun}
+\subsection{Modified Fadlun}
+\subsection{Embedded Luo}
+\subsection{External Luo}
+\section{Oscillating Cylinder in no Flow}
+\subsection{Modified Fadlun}
+\subsection{Embedded Luo}
+\subsection{External Luo}
+\section{Impulsively Started Oscillating Cylinder}
+\subsection{Modified Fadlun}
+\subsection{Embedded Luo}
+\subsection{External Luo}
+\section{Vorticity Induced Vibration}
+\subsection{Embedded Luo}
+\subsection{External Luo}
 
+\chapter{Conclusions}
+\section{Error Analysis}
+\subsection{Modified Fadlun}
+Cylinder
+osc cylinder
+viv
+\subsection{Embedded Luo}
+Cylinder
+osc cylinder
+viv
+	LC
+	SC
+\subsection{External Luo}
+Cylinder
+osc cylinder
+viv
+	LC
+	SC
 
-%We're born meat and we die meat. Meanwhile, we learn (see Algorithm \ref{alg:learning}).
+\section{Performance Scaling}
 
-%\begin{algorithm}[h]
-%\caption{\textsc{Learning}}
-%\label{alg:learning}
-%\begin{algorithmic}[\chapter]
-%\ENSURE{Optimal policy $\mathcal{C}$}
-%	\STATE $\mathcal{C} \gets 32$
-%	\RETURN $\mathcal{C}$
-%\end{algorithmic}
-%\end{algorithm}
-
-%Wow, that really was excellent.
-%This is the end, my only friend, the end.
-
-%\begin{figure}[!ht]
-%\centering
-%\fbox{\huge Box}
-%\caption{Go figure.}
-%\end{figure}
-
-
+\chapter{Future Work}
 
 \bibliographystyle{plain}
 \bibliography{thesis}
