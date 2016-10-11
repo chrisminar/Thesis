@@ -310,22 +310,32 @@ We came up with the following sequence that is elaborated on in section \ref{ID:
 
 This chapter will detail the discretization of the immersed boundary method and implementation on the GPU. 
 
+\section{Sparse Matricies}
+When using a dense matrix, every spot in the matrix has a stored value.
+In the matrix that represents the left hand side of the linear algebra terms, most of the values are zeros.
+It is inefficient to store the entirety a so called sparse matrix.
+There are many ways to store a sparse matrix, and the CUSP library can handle several types.
+The solver uses the COOrdinate matrix, COO for short.
+A COO matrix stores an entry as a combination of row, column and value.
+In CUSP, there are three separate arrays that from the COO data structure.
+When populating a COO matrix with a GPU, each node must have a predetermined location in the array.
+This is required because the left hand side matrix can't be stepped through in order as it can be on a CPU.
+Corners, sides and center nodes have three, four and five matrix entries, respectively.
+Each GPU thread calculates the total entries before it and starts placing its nodes appropriately.
+The nodes are counted from left to right, top to bottom.
+Once the number of entries has been found, the threads add their entries consecutively to the arrays.
+
 \section{GPU implementation strategy}
 \label{GPU implementation strategy}
-\todo[inline]{store everything on the gpu}
-\todo[inline]{all calculations on the gpu}
-\todo[inline]{no transferring data}
-\todo[inline]{don't optimize things other than poisson eq}
-\todo[inline]{this hasn't been edited from the paper yet}
 
-We developed our solver for full GPU operation to improve performance relative to CPU-based algorithms.
+The solver is developed for full GPU operation to improve performance relative to CPU-based algorithms.
 To this end, several overarching strategies have been implemented.
 First, all calculations are performed on the GPU, and all data is stored on the GPU.
 Typically, efforts are taken to avoid thread divergence when writing code for a GPU.
 We found it favorable to write kernels with occasionally poor thread-parallel performance, i.e., kernels with significant divergence, rather than copying data to the host to do calculations to reduce divergence.
 In our experiences, transferring data back and forth took significantly more time than would be saved by running some operations on a CPU.
 This was particularly relevant when moving from a stationary body to a moving body.
-When simulating a stationary body, several calculations only need to be performed once, such as the left side matrices or node identification.
+When simulating a stationary body, several calculations only need to be performed once, such as the left side matrices, node identification and preconditioners.
 When simulating a moving body, these values need to be recalculated every time step, causing a total computational cost for each nearly as high as the Poisson equation solve (typically the most expensive step).
 This relates to the second strategy: evaluate algorithm performance compared to the Poisson equation.
 Increasing the parallel performance of kernels has little effect on the overall solver performance because solving the Poisson equation typically takes more than \SI{90}{\percent} of the total computational time.
@@ -580,10 +590,63 @@ The first solver is closer to the original method.
 All of the extrapolation and interpolation happens inside of the linear algebra steps. 
 The second solver moves the interpolation and extrapolation outside of the linear algebra as described in section \ref{putting it all together}.
 \subsection{Embedded Interpolation}
-In the embedded interpolation version of Luo et al., the Navier--Stokes and interpolated solutions for field values are calculated and weighted inside each linear algebra step.
-\todo{more here}
-do an example of velocity for interpolation and extrapolation for the rhs and the lhs
-talk about when we do external interps
+In the embedded interpolation version, the Navier--Stokes and interpolated solutions for field values are calculated and weighted inside each linear algebra step.
+In the intermediate velocity substep, the right hand side terms are first calculated as if no body was present.
+Then, everything that can be calculated based off of the geometry is done.
+This includes the weighting values and most of the interpolation.
+For example the equations used to interpolated for velocity at the ghost node, \eqref{eq:Interpolation} and \eqref{eq:Velocity Interpolation}, are expanded and manipulated to become equation \eqref{eq:ID reorganized interpolation}.
+\begin{equation}
+\textbf{u}_{GN} = 2\textbf{u}_{BI} + C_{NW}\textbf{u}_{NW} + C_{NE}\textbf{u}_{NE} + C_{SW}\textbf{u}_{SW} + C_{SE}\textbf{u}_{SE}\label{eq:ID reorganized interpolation}
+\end{equation}
+The $C$ coefficients are based off of the interpolation's location.
+\todo{elaborate on what makes C somewhere}
+Before the left hand side matrix can be calculated, the number of values in the sparse matrix must be found first because the hybrid nodes now have a larger stencil than normal. 
+Figure \ref{fig:ID combined stencil}a shows how the ghost node stencils can be modified.
+Ghost node 1, in the upper left, only uses four nodes indicated by the open circles. 
+In a situation where a stencil is smaller than five nodes, an additional node that isn't being used is added with a coefficient of zero.
+This is done because cusp COO matricies are initialized with a specified number of non-zero nodes.
+When initialized, all the values are set at (0,0,0) where the zeros represent the row, column and value of a given non-zero entry.
+If the cusp multi-grid solver sees multiple (0,0,0) entries it will fail to converge upon a solution.
+It is easier to add a zero value than to restructure the matrix to not have a value.
+Using node one as an example, say node 1 is the 1000th spot in the array and the grid spans nx cells in the x direction.
+The nodes that represent the stencil will be (1000,1000+nx,$u_{north}$), (1000,1000+nx+1,$u_{north east}$), (1000,1000,$u_{center}$) and (1000,1000+1,$u_east$).
+The value, (1000,1000-1,0) would be added to the sparse matrix to ensure that there are five nodes for this value.
+Ghost node two, which depends on the nodes marked with open squares, does not need any special resizing because it uses five nodes.
+
+The stencil for hybrid nodes, as seen in Figure \ref{fig:ID combined stencil}, has two overlapping stencils.
+The interpolation stencil is shown by the shaded region and depends on the nodes marked with circles.
+The Navier--Stokes stencil is marked with the solid black lines and open squares.
+Combining the two into a hybrid stencil results in six entries to the sparse matrix.
+Five of the six nodes are put in place as normal and the extra node is added at the end. 
+The algorithm that counts the extra nodes sweeps through the matrix, right to left, top to bottom, counting hybrid nodes.
+Once the total number of entires to the sparse matrix has been calculated, the left hand side matrix is calculated.
+By adding all of the counted hybrid nodes to another matrix, that is otherwise full of zeros, a total number of extra nodes required for the sparse matrix is found and a map is created for adding extra nodes.
+For instance, if there are 200 hybrid nodes, there will be 5, 4 and 3 entries for the center, side and corner nodes respectively plus 200 additional entires at the end.
+Considering hybrid node 100, 5 of the entries will be placed in the allocated positions in the sparse matrix and the extra entry will be placed 100 positions from the end.
+
+\begin{figure}[htb]
+	\centering
+	\begin{subfigure}{0.4\textwidth}
+			\includestandalone[width=\linewidth]{combined_stencil}
+			\caption{Stencil modification for ghost nodes}		
+	\end{subfigure}
+	~
+	\begin{subfigure}{0.4\textwidth}
+		\includestandalone[width=\linewidth]{combined_stencil_2}
+		\caption{The combination of Navier--Stokes and interpolation stencils.}		
+	\end{subfigure}
+	\caption{The stencil of the left hand side matrices change when doing the interpolations inside of the linear algebra step.}
+	\label{fig:ID combined stencil}
+\end{figure}
+
+After the LHS matrix is made, it is sorted by row and column using a built in CUSP function and then the preconditioners are rebuilt.
+The CUSP solvers are optimized to operate on a sorted matrix and sometimes crashed due to the out of order values at the end of the arrays.
+During the calculation of the LHS matrix, the modifications to the right hand side matrix are stored in two values.
+The first one is a multiplier for the original RHS matrix and the second is added to that value.
+This makes it possible to multiply the original value by the Navier--Stokes weight then add the interpolated weight.
+Finally, $\hat{\textbf{u}}$ is calculated using a linear algebra solver.
+
+The implementation of the embedded Poisson equation is the same as outlined above.
 \subsection{External Interpolation}
 \todo{more here}
 do the same example
