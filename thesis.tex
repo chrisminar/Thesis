@@ -367,14 +367,57 @@ There is no theoretical reason, however, why the numerical suppression method wi
 \end{figure}
 
 \section{Node Identification}
+Nodes are identified using a ray tracing algorithm described in the book Computational Geometry in C by Joesph O'Rourke\cite{o1998computational}.
+The implementation is based of the CPU implementation from the original cuIBM code.
+One thread is generated for each node, be it u, v or pressure and performs the following actions to find rays in the x direction.
+First the Lagrangian body nodes are looped through to make segments with their nearest neighbors.
+If to top of this segment is above the node and the bottom of the segment is below the node then the x location of the body at the height of the node is found as seen in figure \ref{fig:node id 1}.
+The node is then tested for proximity to the body in the x direction.
+To determine what the node type five x-coordinates are used; $x_{i-1}$, $x_{i}$, $x_{i+1}$, $x_{BI}$ and $x_{body center}$.
+Using Figure \ref{fig:node id 1} for example, the BI will text as being greater than the body center, greater than $x_{i-1}$ and less than $x_{i}$ which means $u_{i,j}$ is a hybrid node and $u_{i-1,j}$ is a ghost node.
+
+It is possible for a hybrid or ghost node to be unable to find the body when searching in the x direction, i.e. if the node is above the highest body node.
+After the algorithm looks for intersections in the x direction it searches in the y direction.
+In the case where a node is able to find the body in both the x and y directions, the x direction is always chosen.
+The v velocity and pressure nodes are found in the same way as described above.
+
+After all the points have been tagged, the solid nodes are set to an arbitrary value so they can be easily found later.
+This step is not critical for Navier--Stokes but is needed for the force calculation and can be convenient when visualizing the solution.
+\begin{figure}
+	\centering
+	\includestandalone[width=0.5\textwidth]{node_id_1}
+	\caption{To find the hybrid and ghost nodes the position of the body must be translated from the Lagrangian body nodes to the Eulerian grid.}
+	\label{fig:node id 1}
+\end{figure}
+
 \todo[inline]{find krishnan paper to reference}
-\todo[inline]{find algorithm to reference}
 
 \section{Force Calculation}
 \label{Force Calculation}
-\todo[inline]{find reference to control volume approach}
-\todo[inline]{write control volume approach}
-\todo[inline]{write luo et al approach}
+
+The drag and lift on the body are calculated using the control volume approach detailed in Lai and Peskin\cite{lai2000immersed}.
+The implementation of this approach is largely the same as the original cuIBM.
+From Lai and Peskin the drag force can be calculated using Equation \ref{eq:force calculation}.
+\begin{equation}\label{eq:force calculation}
+F_D=-\int_{\partial \Omega_0} \rho u_i\textbf{u}\cdot \textbf{n}ds- \int_{\partial \Omega_0}pn_ids+\int_{\partial \Omega_0}\mu \left(\frac{\partial u_i}{\partial x_j}+\frac{\partial u_j}{\partial x_i}\right)n_jds-\frac{\partial}{\partial t}\int_{\Omega_0}\rho u_i d\textbf{x}
+\end{equation}
+$\Omega_0$ is any square domain around the body.
+Once discretized, simplified, non-dimensionalized the terms can be rearranged into 3 groups, FxX, FxY and FxU.
+The first term represents the forces in the x direction from the left and right of the control volume and is formed from the second and third integral.
+FxY is the forces in the x direction from the top and bottom of the control volume.
+It comes from the first and third integral.
+The fourth integral becomes FxU, the x force from the unsteady term and includes everything inside of the control volume.
+These terms are partialy discretized in equations \eqref{eq:force calculation 2}, \eqref{eq:force calculation 3} and \eqref{eq:force calculation 4}. 
+\begin{align}
+FxX &=\sum_{\Omega_y}-\left((p_e-p_w)+(u_e^2-u_w^2)-\nu\left(\left.\frac{du}{dx}\right|_e-\left.\frac{dv}{dx}\right|_w\right)\right)dy\label{eq:force calculation 2}\\
+FxY &=\sum_{\Omega_x}-\left(0.5(u_nv_n-u_sv_s)-0.25\nu \left(\left.\frac{du}{dy}\right|_n+\left.\frac{dv}{dx}\right|_n-\left.\frac{du}{dy}\right|_s-\left.\frac{dv}{dx}\right|_s
+\right)
+\right)
+\label{eq:force calculation 3}\\
+FxU &=\;\label{eq:force calculation 4}
+\end{align}
+It should be noted that all nodes inside the body must be excluded from the unsteady term.
+\todo[inline]{write luo et al approach?}
 \todo[inline]{find reference to original luo approach}
 
 \section{Preconditioning and Linear Algebra Solvers}
