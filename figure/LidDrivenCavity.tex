@@ -1,0 +1,26 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{tikz}
+\usetikzlibrary{positioning}
+\usetikzlibrary{shapes}
+
+\begin{document}
+
+\begin{tikzpicture}
+%grid
+%horizontal
+\draw[black, thin] (-2,-2) -- (-2,2) -- (2,2) -- (2,-2) -- cycle;
+
+\node[anchor=north east] at (-2,0) {$u=0$};
+\node[anchor=south east] at (-2,0) {$v=0$};
+\node[anchor=north west] at (2,0) {$u=0$};
+\node[anchor=south west] at (2,0) {$v=0$};
+\node[anchor=south] at (0,2) {$u=1$};
+\node[anchor=north] at (0,2) {$v=0$};
+\node[anchor=south] at (0,-2) {$u=0$};
+\node[anchor=north] at (0,-2) {$v=0$};
+
+\draw[gray,thin,dashed] (-2,0) -- (2,0);
+\draw[gray,thin,dashed] (0,-2) -- (0,2);
+ \end{tikzpicture}
+\end{document}

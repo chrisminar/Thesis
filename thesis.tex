@@ -277,35 +277,6 @@ If the hybrid node only has one neighbor, then $\Delta=0$ for the other directio
 	\label{fig:Weight}
 \end{figure}
 
-\subsection{Putting it all together}
-\label{putting it all together}
-
-Luo et al. did not describe exactly where all this interpolating and extrapolating takes place.
-It is a bit confusing where and when values should be extrapolated and interpolated.
-We tried doing it two ways.
-The first way more closely follows the work of Luo et al.\cite{Luo:2012gx} which says to perform the interpolations, extrapolations and weighting inside of the linear algebra solutions for the intermediate velocity and pressure. 
-Field values will solved by plugging in Equations~\eqref{eq:Intermediate Velocity} or \eqref{eq:Poisson} and \eqref{eq:Interpolation} into Equation~\eqref{eq:Weight}. 
-The discretization of these can be seen in section \ref{ID:Iterative}.
-We also tried to resolve the time step in a non-iterative manner by calculating the interpolations, extrapolations and weighting outside of the linear algebra. 
-The order is setup such that a value is interpolated or extrapolated just before it is needed for the subsequent step.
-We came up with the following sequence that is elaborated on in section \ref{ID:Serial}:
-\begin{enumerate}
-	\item Identify all nodes as hybrid, ghost, fluid or solid.
-	\item Extrapolate u and v velocity values to ghost nodes.
-	\item Interpolate for u and v velocities at hybrid nodes.
-	\item Calculate right hand side for the intermediate velocity solution.
-	\item Solve for intermediate velocity.
-	\item Weight the two intermediate velocity solutions.
-	\item Extrapolate intermediate velocities to ghost nodes.
-	\item Calculate right hand side for the Poisson equation.
-	\item Solve the Poisson equation.
-	\item Interpolate for pressure at hybrid nodes.
-	\item Weight the two pressure solutions.
-	\item Extrapolate pressure to ghost nodes.
-	\item Update velocity.
-	\item Advance time.
-\end{enumerate}
-
 \chapter{Implementaiton and Discretization}\label{Implementation}
 
 This chapter will detail the discretization of the immersed boundary method and implementation on the GPU. 
@@ -410,21 +381,29 @@ The fourth integral becomes FxU, the x force from the unsteady term and includes
 These terms are partialy discretized in equations \eqref{eq:force calculation 2}, \eqref{eq:force calculation 3} and \eqref{eq:force calculation 4}. 
 \begin{align}
 FxX &=\sum_{\Omega_y}-\left((p_e-p_w)+(u_e^2-u_w^2)-\nu\left(\left.\frac{du}{dx}\right|_e-\left.\frac{dv}{dx}\right|_w\right)\right)dy\label{eq:force calculation 2}\\
-FxY &=\sum_{\Omega_x}-\left(0.5(u_nv_n-u_sv_s)-0.25\nu \left(\left.\frac{du}{dy}\right|_n+\left.\frac{dv}{dx}\right|_n-\left.\frac{du}{dy}\right|_s-\left.\frac{dv}{dx}\right|_s
-\right)
-\right)
-\label{eq:force calculation 3}\\
-FxU &=\;\label{eq:force calculation 4}
+FxY &=\sum_{\Omega_x}-\left(0.5(u_nv_n-u_sv_s)-0.25\nu \left(\left.\frac{du}{dy}\right|_n+\left.\frac{dv}{dx}\right|_n-\left.\frac{du}{dy}\right|_s-\left.\frac{dv}{dx}\right|_s\right)\right)\label{eq:force calculation 3}\\
+FxU &=\frac{u_i^{n+1}-u_i^{n}}{dt}0.5dydx\;\label{eq:force calculation 4}
 \end{align}
-It should be noted that all nodes inside the body must be excluded from the unsteady term.
-\todo[inline]{write luo et al approach?}
-\todo[inline]{find reference to original luo approach}
+The subscripts n,e,s,w represent the north, east, south and west faces of the sqaure domain $\Omega_0$.
+In practice, varying the size of $\Omega_0$ from L=4 to L=10 was not found to have a significant effect on the force or computation time.
+It was also found that the body didn't have to be at the center of the domain.
+Given this, the control volume is generally kept in the same location as the body moves around inside it.
+We typically used a square with sides L=10 for a body of size D=1 that moves about 1D away from center.
+
+Depending on how the ghost and solid nodes are handled Equation \eqref{eq:force calculation} can predict force very poorly.
+To circumvent this effect over multiple solvers all nodes inside the body are excluded from the unsteady term.
 
 \section{Preconditioning and Linear Algebra Solvers}
 \label{Preconditioning and Linear Algebra Solvers}
-\todo[inline]{talk about cusp}
-\todo[inline]{talk about the preconditioners}
-\todo[inline]{talk about multi grid methods}
+CUSP(cuda sparse) is the library that solves the linear algebra.
+CUSP can handle many different types of sparse data structures and has several different solves built in.
+The solver uses a bi-conjugate gradient stabilized(BiCGSTAB) method for both the intermediate velocity and Poisson equation.
+Preconditioners are used to speed up the linear algebra step.
+A diagonal preconditioner is used for the intermediate velocity and a smoothed aggregation for the pressure step.
+Smoothed aggregation is a type of multi-grid approach to linear algebra that can drastically speed it up.
+In a multi-grid method, several iterations of BiCGSTAB are done on the full grid, then the solution is transfered to a coarser grid.
+This process is repeated until the grid is very coarse and then the solution is rebuilt on finer and finer grids until a solution has been obtained for the full grid.
+Getting an approximation to the matrix's inverse using coarser grid saves computational time.
 \section{Navier--Stokes}
 \label{ID:Navier Stokes}
 
@@ -627,11 +606,42 @@ If the body passes through the cell, $dx_i$ and or $dy_j$ from Equation \eqref{e
 \todo{should there be some sort of diagram to help illustrate this concept?}
 
 \section{Luo Immersed Boundary Method}
-The code has two solvers based off the work of Luo et al. 
-The key difference between them is when the extrapolation and interpolation takes place. 
-The first solver is closer to the original method. 
-All of the extrapolation and interpolation happens inside of the linear algebra steps. 
-The second solver moves the interpolation and extrapolation outside of the linear algebra as described in section \ref{putting it all together}.
+The solver has two methods based off the work of Luo et al\cite{Luo:2012gx}. 
+They did not describe exactly where all this interpolating and extrapolating takes place.
+It is a bit confusing where and when values should be extrapolated and interpolated.
+We tried doing it two ways.
+The key difference between them is when the extrapolation and interpolation takes place.
+The first method moves the interpolation and extrapolation outside of the linear algebra.
+This has the benefit of simplifying the linear algebra step at the cost of additional error.
+By separating the extrapolation, interpolation and linear algebra steps, each one does not get the most updated information when being calculated because they all depend on each other.
+The first way more closely follows the work of Luo et al. which says to perform the interpolations, extrapolations and weighting inside of the linear algebra solutions for the intermediate velocity and pressure.
+All of the extrapolation and interpolation happens inside of the linear algebra steps.
+Field values will solved by plugging in Equations~\eqref{eq:Intermediate Velocity} or \eqref{eq:Poisson} and \eqref{eq:Interpolation} into Equation~\eqref{eq:Weight}. 
+The discretization of these can be seen in section \ref{ID:Iterative}.
+
+\subsection{External Interpolation}
+
+The external interpolation method tries to resolve the time step in a non-iterative manner by calculating the interpolations, extrapolations and weighting outside of the linear algebra. 
+The following sequence is setup such that a value is interpolated or extrapolated just before it is needed for the subsequent step.
+For example, the equation for intermediate velocity,\eqref{eq:Intermediate Velocity}, depends on the velocity field so $u$ and $v$ are interpolated for at the hybrid nodes and extrapolated for at the ghost nodes before the right hand side matrix is calculated.
+
+\begin{enumerate}
+	\item Identify all nodes as hybrid, ghost, fluid or solid.
+	\item Extrapolate u and v velocity values to ghost nodes.
+	\item Interpolate for u and v velocities at hybrid nodes.
+	\item Calculate right hand side for the intermediate velocity solution.
+	\item Solve for intermediate velocity.
+	\item Weight the two intermediate velocity solutions.
+	\item Extrapolate intermediate velocities to ghost nodes.
+	\item Calculate right hand side for the Poisson equation.
+	\item Solve the Poisson equation.
+	\item Interpolate for pressure at hybrid nodes.
+	\item Weight the two pressure solutions.
+	\item Extrapolate pressure to ghost nodes.
+	\item Update velocity.
+	\item Advance time.
+\end{enumerate}
+
 \subsection{Embedded Interpolation}
 In the embedded interpolation version, the Navier--Stokes and interpolated solutions for field values are calculated and weighted inside each linear algebra step.
 In the intermediate velocity substep, the right hand side terms are first calculated as if no body was present.
@@ -690,25 +700,162 @@ This makes it possible to multiply the original value by the Navier--Stokes weig
 Finally, $\hat{\textbf{u}}$ is calculated using a linear algebra solver.
 
 The implementation of the embedded Poisson equation is the same as outlined above.
-\subsection{External Interpolation}
-\todo{more here}
-do the same example
+
 
 \chapter{Validation and Verification}\label{Validation}
+The solvers have been compared against five well known simulations and experiments.
+Table \ref{table:VV table} shows which solvers were used in each test.
+\todo{make table}
+\todo{describe why some solvers are not done with certain tests}
+Each simulation was chosen to test a specific capability of the solver and compound in difficulty.
+Lid Driven Cavity is the classic validation case for a laminar solver.
+It tests discretization of the basic Navier--Stokes equation which includes the advection and diffusion terms, linear algebra and Dirichlet boundary conditions.
+The second simulation is an impulsively started cylinder which tests the immersed boundary and and the force calculation.
+The third simulation tests the solvers ability to handle body with superscribed motion.
+In this test, a cylinder has a set sinusoidal motion in a stagnant flow.
+The fourth simulation has a set sinusoidal motion with a flow.
+Both of these tests look at the force calculation for a moving body and help quantify the numerical oscillation caused by direct forcing. 
+The last simulation is called Vorticity Induced Vibrations(VIV) and tests the solvers ability to accurately predict body location, velocity and force when the body motion isn't prescribed.
+
 \section{Lid Driven Cavity}
+\todo{cite verification}
+The lid driven cavity is a two dimensional simulation.
+The lid of the square domain has a Dirichlet boundary condition of $u=1$. 
+All of the other velocity boundary conditions $u$ and $v$ set to zero.
+The resulting simulation gives a steady state swirling flow field that can be compared to existing literature.
+It is convenient to compare the velocities at the horizontal and vertical centerlines.
+Figure \ref{fig:lid driven cavity} shows the domain and centerlines for lid driven cavity.
+Two Reynolds numbers were tested, 100 and 1000.
+\begin{figure}[htb]
+	\centering
+	\includestandalone[width=0.5\textwidth]{LidDrivenCavity}
+	\caption{The domain of a lid driven cavity simulation}
+	\label{fig:lid driven cavity}
+\end{figure}
+
+For a Reynolds number of 100 the domain was discretized into a 32x32 grid. 
+What a time step of 0.01 the maximum CFL number works out to be approximately 0.3 using $\Delta t(u/\Delta x+v/\Delta y)$.
+In figure \ref{fig:ldc100} (a) shows the $v$ velocity at the horizontal centerline and (b) shows the $u$ velocity at the vertical centerline. 
+\begin{figure}[htb]
+	\centering
+	\begin{subfigure}{0.4\textwidth}
+		\includestandalone[width=\linewidth]{ldc_horizontal_100}
+		\caption{$v$ velocity at the horizontal centerline.}		
+	\end{subfigure}
+	~
+	\begin{subfigure}{0.4\textwidth}
+		\includestandalone[width=\linewidth]{ldc_vertical_100}
+		\caption{$u$ velocity at the vertical centerline.}		
+	\end{subfigure}
+	\caption{Verification for lid driven cavity with a Reynolds number of 100.}
+	\label{fig:ldc100}
+\end{figure}
+
+For a Reynolds number of 1000 the domain was discretized into a 128x128 grid. 
+What a time step of 0.004 the maximum CFL number works out to be approximately 0.3 using $\Delta t(u/\Delta x+v/\Delta y)$.\todo{find correct cfl number}
+In figure \ref{fig:ldc1000} (a) shows the $v$ velocity at the horizontal centerline and (b) shows the $u$ velocity at the vertical centerline. 
+\begin{figure}[htb]
+	\centering
+	\begin{subfigure}{0.4\textwidth}
+		\includestandalone[width=\linewidth]{ldc_horizontal_100}
+		\caption{$v$ velocity at the horizontal centerline.}		
+	\end{subfigure}
+	~
+	\begin{subfigure}{0.4\textwidth}
+		\includestandalone[width=\linewidth]{ldc_vertical_100}
+		\caption{$u$ velocity at the vertical centerline.}		
+	\end{subfigure}
+	\caption{Verification for lid driven cavity with a Reynolds number of 100.}
+	\label{fig:ldc1000}
+\end{figure}
+
 \section{Impulsively started cylinder}
-\subsection{Fadlun}
-\subsection{Modified Fadlun}
-\subsection{Embedded Luo}
-\subsection{External Luo}
-\section{Oscillating Cylinder in no Flow}
-\subsection{Modified Fadlun}
-\subsection{Embedded Luo}
-\subsection{External Luo}
+The impulsively started cylinder simulation tests the solvers ability to handle an immersed body.
+A starting $u$ velocity of one is set in the entire domain.
+A Dirichlet inlet, top, and bottom boundaries are set to one as well.
+A convective boundary condition is used at the exit.
+To verify flow over a stationary cylinder, drag is calculated over time and compared to Koumoutsakos and Leonard~\cite{Koumoutsakos:1995bf}.
+
+All lengths are normalized against the diameter.
+For a Reynolds number of 40 a uniform grid with spacing 0.025 is used from (-0.6,-0.6) to (0.6,0.6).
+The grid stretches as it moves away from the center until it reaches the domain's edge at \pm 15.
+A total of 186x186 cells are used.
+\todo{find cfl number}
+A time step of 0.005 is used.
+Figure \ref{fig:cy40}a and \ref{fig:cy40}b compares the computed drag force of the modified Fadlun et al. and non-embedded Luo et al. methods respectively to that of Koumoutsakos and Leonard.
+\begin{figure}[htb]
+	\centering
+	\begin{subfigure}{0.4\textwidth}
+		\includestandalone[width=\linewidth]{cy40fadlun}
+		\caption{Modified Fadlun et al. style solver.}
+	\end{subfigure}
+	~
+	\begin{subfigure}{0.4\textwidth}
+		\includestandalone[width=\linewidth]{cy40luo}
+		\caption{Non-embedded Luo et al. style solver.}
+	\end{subfigure}
+	\caption{Drag force verses time for two solvers compared to Koumoutsakos and Leonard for flow over an impulsively started cylinder.}
+	\label{fig:cy40}
+\end{figure}
+
+For a Reynolds number of 550 a uniform grid with spacing 0.01 is used from (-0.54,-0.54) to (0.54,0.54).
+The grid stretches as it moves away from the center until it reaches the domain's edge at \pm 15.
+A total of 186x186 cells are used.\todo{update total grid size}
+\todo{find cfl number}
+A time step of 0.0025 is used.
+Figure \ref{fig:cy550}a and \ref{fig:cy550}b compares the computed drag force of the modified Fadlun et al. and non-embedded Luo et al. methods respectively to that of Koumoutsakos and Leonard.
+\begin{figure}[htb]
+	\centering
+	\begin{subfigure}{0.4\textwidth}
+		\includestandalone[width=\linewidth]{cy550fadlun}
+		\caption{Modified Fadlun et al. style solver.}
+	\end{subfigure}
+	~
+	\begin{subfigure}{0.4\textwidth}
+		\includestandalone[width=\linewidth]{cy550luo}
+		\caption{Non-embedded Luo et al. style solver.}
+	\end{subfigure}
+	\caption{Drag force verses time for two solvers compared to Koumoutsakos and Leonard for flow over an impulsively started cylinder.}
+	\label{fig:cy550}
+\end{figure}
+
+All lengths are normalized against the diameter.
+For a Reynolds number of 3000 a uniform grid with spacing 0.004 is used from (-0.52,-0.52) to (0.52,0.52).
+The grid stretches as it moves away from the center until it reaches the domain's edge at \pm 15.
+A total of 186x186 cells are used.\todo{find correct size}
+\todo{find cfl number}
+A time step of 0.001 is used.
+Figure \ref{fig:cy3000}a and \ref{fig:cy3000}b compares the computed drag force of the modified Fadlun et al. and non-embedded Luo et al. methods respectively to that of Koumoutsakos and Leonard.
+\begin{figure}[htb]
+	\centering
+	\begin{subfigure}{0.4\textwidth}
+		\includestandalone[width=\linewidth]{cy3000fadlun}
+		\caption{Modified Fadlun et al. style solver.}
+	\end{subfigure}
+	~
+	\begin{subfigure}{0.4\textwidth}
+		\includestandalone[width=\linewidth]{cy3000luo}
+		\caption{Non-embedded Luo et al. style solver.}
+	\end{subfigure}
+	\caption{Drag force verses time for two solvers compared to Koumoutsakos and Leonard for flow over an impulsively started cylinder.}
+	\label{fig:cy3000}
+\end{figure}
+
 \section{Impulsively Started Oscillating Cylinder}
-\subsection{Modified Fadlun}
-\subsection{Embedded Luo}
-\subsection{External Luo}
+The impulsively started oscillating cylinder is a simulation used by Luo et al. to demonstrate a reduction of numerical oscillations between methods.
+It is not a verification or validation because it doesn't compare the results to published work, rather it is a useful tool to visualize the numerical oscillations.
+A true verification of the moving body is done in the next section,\ref{sec:Oscillating Cylinder in no Flow}
+This simulation has the same domain, initial and boundary conditions as the stationary impulsively started cylinder.
+The cylinder moves according to equation \eqref{eq:cylinder osc}.
+\todo{cylinder eq here}
+cfl
+grid size
+mid spacing
+
+\section{Oscillating Cylinder in no Flow}
+\label{sec:Oscillating Cylinder in no Flow}
+
+
 \section{Vorticity Induced Vibration}
 \subsection{Embedded Luo}
 \subsection{External Luo}
