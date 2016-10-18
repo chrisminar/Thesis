@@ -877,21 +877,142 @@ The maximum CFL numbers by row are approximately \numlist{0.35; 0.35; 0.7; 1.0}.
 
 \section{Oscillating Cylinder in no Flow}
 \label{sec:Oscillating Cylinder in no Flow}
-\todo[inline]{I AM HERE}
-f is 1
-find person to cite
-explain why it doesn't match validation exactly
-
+The oscillation of a cylinder in no flow is verified against the work of Liao et al. \cite{liao2010simulating}. 
+The equations that govern movement,\ref{eq:cylinder position2} and \ref{eq:cylinder velocity2} are the same form as above with different coefficients.
+The domain is also the same as the impulsively started oscillating cylinder.
+Frequency is set at one.
 \begin{align}
 x&=\frac{-1}{2\pi}\sin{2\pi ft}\label{eq:cylinder position2}\\
 y&=-cos{2\pi ft}\;\label{eq:cylinder velocity2}
 \end{align}
 
+Figure \ref{fig:staticInit}shows the drag during the first period versus the steady state drag from Liao et al.
+Figure \ref{fig:static2} shows the drag during the second period.
+In both figures, (a) is external interpolation and (b) is embedded interpolation.
+ 
+\begin{figure}[h]
+	\centering
+	\begin{subfigure}{0.4\textwidth}
+		\includegraphics[width=\linewidth]{staticInitLuo}
+		\caption{External interpolation method.}
+	\end{subfigure}
+	~
+	\begin{subfigure}{0.4\textwidth}
+		\includegraphics[width=\linewidth]{staticInitOsc}
+		\caption{Embedded interpolation method.}
+	\end{subfigure}
+	\caption{Drag force verses time for the first period compared to steady state Liao et al. for an oscillating cylinder in no flow.}
+	\label{fig:staticInit}
+\end{figure}
+
+\begin{figure}[h]
+	\centering
+	\begin{subfigure}{0.4\textwidth}
+		\includegraphics[width=\linewidth]{static2Luo}
+		\caption{External interpolation method.}
+	\end{subfigure}
+	~
+	\begin{subfigure}{0.4\textwidth}
+		\includegraphics[width=\linewidth]{static2Osc}
+		\caption{Embedded interpolation method.}
+	\end{subfigure}
+	\caption{Drag force verses time for steady state oscillating cylinder in now flow compared to Liao et al.}
+	\label{fig:static2}
+\end{figure}
+\todo{change referecne to DUTSCH et al experimental data}
+
 \section{Vorticity Induced Vibration}
-domain
-equation for spring
-equation for motion
-cfl?
+The vorticity induced vibration simulation tests the solvers ability to predict the position of a freely moving body in coupled fluid structure interaction.
+The domain is the same as the impulsively started cylinder simulation except the uniform region ranges from -1 to 1 and -1.5 to 1.5 in the x and y respectively.
+An immersed cylinder starts at the origin with no initial velocity.
+The body is free to move in the y direction but fixed in the x and is mounted to a spring to prevent it from wandering off.
+In VIV the Reynolds number is set in a range that sheds oscillating vortices.
+This combined with the spring causes the body to establish a steady state sinusoidal motion for which the amplitude can be verified.
+Following the work of Borazjani et al. the mass spring damper system \eqref{eq:masspring} that governs the body's movement is non-dimensionalized to become equation \eqref{eq:ndmasspring}.
+\begin{equation}
+M\frac{\partial^2Y}{\partial t^2}+C\frac{\partial Y}{\partial t}+KY=F_y \label{eq:masspring}
+\end{equation}
+$Y$ is the center coordinate of the body, $M$ is the mass, $C$ is the damping factor, $K$ is the stiffness and $F_y$ is the total fluid force on the body in the y direction. 
+The natural frequency and critical damping are given by \eqref{eq:nf} and \eqref{eq:cd}.
+\begin{align}
+\omega &=2\pi f =\sqrt{\frac{K}{M}}\label{eq:nf}\\
+C_{cr}&=2\sqrt{MK}=2K\omega \; \label{eq:cd}
+\end{align}
+\begin{equation}
+\frac{\partial^2 Y}{\partial t^2}+4\pi \zeta\frac{1}{U_{red}}\frac{\partial Y}{\partial t}+4\pi^2\frac{1}{u_{red}^2}Y=\frac{1}{2M_{red}}C_Y\label{eq:ndmasspring}
+\end{equation}
+Borazjani et al. defines the non-dimensional coefficients as follows:
+
+Damping coefficient
+\begin{equation}
+\zeta=\frac{C}{C_{cr}}\label{eq:damping coefficient}
+\end{equation}
+Reduced velocity
+\begin{equation}
+U_{red}=\frac{U}{fD}\label{eq:reduced velocity}
+\end{equation}
+Reduced mass
+\begin{equation}
+M_{red}=\frac{M}{\rho D^2}\label{eq:reduced mass}
+\end{equation}
+Force coefficient
+\begin{equation}
+C_Y=\frac{2F_Y}{\rho U^2 D}\label{eq:force coefficient}
+\end{equation}
+In this simulation, Re is set to 150, $\zeta$ is set to 0, $M_red$ is set to 2 and $U_{red}$ is varied between 3 and 8.
+
+There are two different ways to update body position, loose and strong coupling.
+Loose coupling comes from the explicit derivation of equation \eqref{eq:ndmasspring}.
+A time step using loose coupling looks as follows:
+\begin{enumerate}
+	\item Solve for field values at $t^{n+1}$ using Naiver--Stokes.
+	\item Calculate body forces.
+	\item Move body using equations \eqref{eq:lc1} and \eqref{eq:lc2}.
+\end{enumerate}
+\begin{align}
+v^{n+1} &= v^n-\frac{dt\pi^24}{U_{red}^2}\left(y^n+\frac{dtv^n}{2}\right) + \frac{dtC_Y}{\left(2M_{red}\right)\left(1+\frac{4dt^2\pi^2}{U_{red}^2}\right)} \label{eq:lc1} \\
+y^{n+1} &= y^n +\frac{dt\left(v^{n+1}+v^n\right)}{2}\; \label{eq:lc2}
+\end{align}
+
+Equation \eqref{eq:ndmasspring} can also be discretized implicitly.
+This is know as strong coupling.
+A strong coupling time step repeatly calculates the new body position is converged on:
+\begin{enumerate}
+	\item Solve for field values at sub step $t^{k+1}$ using Naiver--Stokes.
+	\item Calculate body forces
+	\item Move body using equations \eqref{eq:lc1} and \eqref{eq:sc}.
+	\item If $|Y^{k+1}-Y^k| \approx 0$ advance time, otherwise advance sub step.
+\end{enumerate}
+\begin{equation}
+y^{k+1} = \alpha \left(y^n+\frac{dt\left(v^{k+1}+v^n\right)}{2}\right) +\left(1-\alpha\right)y^k\label{eq:sc}
+\end{equation}
+
+Figures \ref{fig:viv1}, \ref{fig:viv2}, \ref{fig:viv3} and \ref{fig:viv4} show the maximum amplitude of the 6 VIV simulations as calculated by loose coupling external interpolation, strong coupling external interpolation, loose coupling embedded interpolation and strong coupling embedded interpolation respectively.
+Results are verified against the curvilinear immeresed boundary method of Borazjani et al.\cite{borazjani2008curvilinear} and the unstructured finite-element ALE approach of Ahn and Kallinderis\cite{ahn2006strongly}.
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{vivexlc}
+	\caption{The maximum amplitude vs reduced velocity for the VIV lock in region calculated with external interpolation and loose coupling.}
+	\label{fig:viv1}
+\end{figure}
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{vivexsc}
+	\caption{The maximum amplitude vs reduced velocity for the VIV lock in region calculated with external interpolation and strong coupling.}
+	\label{fig:viv2}
+\end{figure}
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{vivemlc}
+	\caption{The maximum amplitude vs reduced velocity for the VIV lock in region calculated with embedded interpolation and loose coupling.}
+	\label{fig:viv3}
+\end{figure}
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{vivemsc}
+	\caption{The maximum amplitude vs reduced velocity for the VIV lock in region calculated with embedded interpolation and strong coupling.}
+	\label{fig:viv4}
+\end{figure}
 
 \chapter{Conclusions}
 \section{Error Analysis}
