@@ -1,0 +1,24 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{tikz}
+\usetikzlibrary{positioning}
+\usetikzlibrary{shapes}
+
+\begin{document}
+
+\begin{tikzpicture}
+\draw[black, thin] (-3,-3) -- (-3,3) -- (3,3) -- (3,-3) -- cycle;
+\draw[gray, dashed, thin] (-0.2,-0.2) -- (-0.2,0.2) -- (0.2,0.2) -- (0.2,-0.2) -- cycle;
+\draw[black, thin] (0,0) circle (0.1667);
+
+\node[anchor=south east] at (-3,0) {$u=1$};
+\node[anchor=north east] at (-3,0) {$v=0$};
+\node[anchor=south west] at (3,0) {$u=1$ Convective};
+\node[anchor=north west] at (3,0) {$v=0$ Convective};
+\node[anchor=south] at (0,3) {$u=1$};
+\node[anchor=north] at (0,3) {$v=0$};
+\node[anchor=south] at (0,-3) {$u=1$};
+\node[anchor=north] at (0,-3) {$v=0$};
+
+ \end{tikzpicture}
+\end{document}

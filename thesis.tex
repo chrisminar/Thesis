@@ -726,7 +726,7 @@ The resulting simulation gives a steady state swirling flow field that can be co
 It is convenient to compare the velocities at the horizontal and vertical centerlines.
 Figure \ref{fig:lid driven cavity} shows the domain and centerlines for lid driven cavity.
 Two Reynolds numbers were tested, 100 and 1000.
-\begin{figure}[htb]
+\begin{figure}[h]
 	\centering
 	\includestandalone[width=0.5\textwidth]{LidDrivenCavity}
 	\caption{The domain of a lid driven cavity simulation}
@@ -736,15 +736,15 @@ Two Reynolds numbers were tested, 100 and 1000.
 For a Reynolds number of 100 the domain was discretized into a 32x32 grid. 
 What a time step of 0.01 the maximum CFL number works out to be approximately 0.3 using $\Delta t(u/\Delta x+v/\Delta y)$.
 In figure \ref{fig:ldc100} (a) shows the $v$ velocity at the horizontal centerline and (b) shows the $u$ velocity at the vertical centerline. 
-\begin{figure}[htb]
+\begin{figure}[h]
 	\centering
 	\begin{subfigure}{0.4\textwidth}
-		\includestandalone[width=\linewidth]{ldc_horizontal_100}
+		\includegraphics[width=\linewidth]{ldc_horizontal_100}
 		\caption{$v$ velocity at the horizontal centerline.}		
 	\end{subfigure}
 	~
 	\begin{subfigure}{0.4\textwidth}
-		\includestandalone[width=\linewidth]{ldc_vertical_100}
+		\includegraphics[width=\linewidth]{ldc_vertical_100}
 		\caption{$u$ velocity at the vertical centerline.}		
 	\end{subfigure}
 	\caption{Verification for lid driven cavity with a Reynolds number of 100.}
@@ -757,12 +757,12 @@ In figure \ref{fig:ldc1000} (a) shows the $v$ velocity at the horizontal centerl
 \begin{figure}[htb]
 	\centering
 	\begin{subfigure}{0.4\textwidth}
-		\includestandalone[width=\linewidth]{ldc_horizontal_100}
+		\includegraphics[width=\linewidth]{ldc_horizontal_1000}
 		\caption{$v$ velocity at the horizontal centerline.}		
 	\end{subfigure}
 	~
 	\begin{subfigure}{0.4\textwidth}
-		\includestandalone[width=\linewidth]{ldc_vertical_100}
+		\includegraphics[width=\linewidth]{ldc_vertical_1000}
 		\caption{$u$ velocity at the vertical centerline.}		
 	\end{subfigure}
 	\caption{Verification for lid driven cavity with a Reynolds number of 100.}
@@ -775,23 +775,30 @@ A starting $u$ velocity of one is set in the entire domain.
 A Dirichlet inlet, top, and bottom boundaries are set to one as well.
 A convective boundary condition is used at the exit.
 To verify flow over a stationary cylinder, drag is calculated over time and compared to Koumoutsakos and Leonard~\cite{Koumoutsakos:1995bf}.
+Figure \ref{fig:iscylinder} shows the domain of the Reynolds number 40 simulation, the domains for Reynolds number 550 and 3000 have a slightly smaller uniform grid section in the middle.
+\begin{figure}[h]
+	\centering
+	\includestandalone[width=0.5\textwidth]{CylinderDomain}
+	\label{fig:iscylinder}
+	\caption{The domain of and impulsively started cylinder simulation with Reynolds number forty.}
+\end{figure}
 
 All lengths are normalized against the diameter.
 For a Reynolds number of 40 a uniform grid with spacing 0.025 is used from (-0.6,-0.6) to (0.6,0.6).
-The grid stretches as it moves away from the center until it reaches the domain's edge at \pm 15.
+The grid stretches as it moves away from the center until it reaches the domain's edge at $\pm$ 15.
 A total of 186x186 cells are used.
 \todo{find cfl number}
 A time step of 0.005 is used.
 Figure \ref{fig:cy40}a and \ref{fig:cy40}b compares the computed drag force of the modified Fadlun et al. and non-embedded Luo et al. methods respectively to that of Koumoutsakos and Leonard.
-\begin{figure}[htb]
+\begin{figure}[h]
 	\centering
 	\begin{subfigure}{0.4\textwidth}
-		\includestandalone[width=\linewidth]{cy40fadlun}
+		\includegraphics[width=\linewidth]{cy40fadlun}
 		\caption{Modified Fadlun et al. style solver.}
 	\end{subfigure}
 	~
 	\begin{subfigure}{0.4\textwidth}
-		\includestandalone[width=\linewidth]{cy40luo}
+		\includegraphics[width=\linewidth]{cy40luo}
 		\caption{Non-embedded Luo et al. style solver.}
 	\end{subfigure}
 	\caption{Drag force verses time for two solvers compared to Koumoutsakos and Leonard for flow over an impulsively started cylinder.}
@@ -799,20 +806,20 @@ Figure \ref{fig:cy40}a and \ref{fig:cy40}b compares the computed drag force of t
 \end{figure}
 
 For a Reynolds number of 550 a uniform grid with spacing 0.01 is used from (-0.54,-0.54) to (0.54,0.54).
-The grid stretches as it moves away from the center until it reaches the domain's edge at \pm 15.
+The grid stretches as it moves away from the center until it reaches the domain's edge at $\pm$ 15.
 A total of 186x186 cells are used.\todo{update total grid size}
 \todo{find cfl number}
 A time step of 0.0025 is used.
 Figure \ref{fig:cy550}a and \ref{fig:cy550}b compares the computed drag force of the modified Fadlun et al. and non-embedded Luo et al. methods respectively to that of Koumoutsakos and Leonard.
-\begin{figure}[htb]
+\begin{figure}[h]
 	\centering
 	\begin{subfigure}{0.4\textwidth}
-		\includestandalone[width=\linewidth]{cy550fadlun}
+		\includegraphics[width=\linewidth]{cy550fadlun}
 		\caption{Modified Fadlun et al. style solver.}
 	\end{subfigure}
 	~
 	\begin{subfigure}{0.4\textwidth}
-		\includestandalone[width=\linewidth]{cy550luo}
+		\includegraphics[width=\linewidth]{cy550luo}
 		\caption{Non-embedded Luo et al. style solver.}
 	\end{subfigure}
 	\caption{Drag force verses time for two solvers compared to Koumoutsakos and Leonard for flow over an impulsively started cylinder.}
@@ -821,20 +828,20 @@ Figure \ref{fig:cy550}a and \ref{fig:cy550}b compares the computed drag force of
 
 All lengths are normalized against the diameter.
 For a Reynolds number of 3000 a uniform grid with spacing 0.004 is used from (-0.52,-0.52) to (0.52,0.52).
-The grid stretches as it moves away from the center until it reaches the domain's edge at \pm 15.
+The grid stretches as it moves away from the center until it reaches the domain's edge at $\pm$ 15.
 A total of 186x186 cells are used.\todo{find correct size}
 \todo{find cfl number}
 A time step of 0.001 is used.
 Figure \ref{fig:cy3000}a and \ref{fig:cy3000}b compares the computed drag force of the modified Fadlun et al. and non-embedded Luo et al. methods respectively to that of Koumoutsakos and Leonard.
-\begin{figure}[htb]
+\begin{figure}[h]
 	\centering
 	\begin{subfigure}{0.4\textwidth}
-		\includestandalone[width=\linewidth]{cy3000fadlun}
+		\includegraphics[width=\linewidth]{cy3000fadlun}
 		\caption{Modified Fadlun et al. style solver.}
 	\end{subfigure}
 	~
 	\begin{subfigure}{0.4\textwidth}
-		\includestandalone[width=\linewidth]{cy3000luo}
+		\includegraphics[width=\linewidth]{cy3000luo}
 		\caption{Non-embedded Luo et al. style solver.}
 	\end{subfigure}
 	\caption{Drag force verses time for two solvers compared to Koumoutsakos and Leonard for flow over an impulsively started cylinder.}
@@ -846,22 +853,50 @@ The impulsively started oscillating cylinder is a simulation used by Luo et al. 
 It is not a verification or validation because it doesn't compare the results to published work, rather it is a useful tool to visualize the numerical oscillations.
 A true verification of the moving body is done in the next section,\ref{sec:Oscillating Cylinder in no Flow}
 This simulation has the same domain, initial and boundary conditions as the stationary impulsively started cylinder.
-The cylinder moves according to equation \eqref{eq:cylinder osc}.
-\todo{cylinder eq here}
-cfl
-grid size
-mid spacing
+The uniform grid at the center spans from (-2,-2) to (2,2) to account for body's movement.
+
+The cylinder moves according to equation \eqref{eq:cylinder position} and \eqref{eq:cylinder velocity}.
+The frequency, $f$, is 0.2.
+\begin{align}
+x&=-0.25\cos{2\pi ft}\label{eq:cylinder position}\\
+y&=0.1\pi\sin{2\pi ft}\;\label{eq:cylinder velocity}
+\end{align}
+Figure \ref{fig:osccylinder} compares the numerical oscillations seen in drag vs time. 
+The left column shows drag force experienced the external interpolation and extrapolation Luo et al. style solver.
+The right column shows the drag force experience by the embedded interpolation and extrapolation.
+The domain for all the simulations ranges from $-15$ to $15$ with a uniform section from $-2$ to $2$.
+The uniform section is discretized into a $64 \times 64$ grid for the first row and $ 128 \times 128$ grid for last three rows row.
+The maximum CFL numbers by row are approximately \numlist{0.35; 0.35; 0.7; 1.0}.
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=\textwidth]{cropped_oscflow}
+	\caption{The left column shows external interpolation and the right column shows the embedded interpolation. Rows one though four are maximum CFL \numlist{0.35; 0.35; 0.7; 1.0} and have a middle grid spacing of \numlist{0.0625; 0.03125; 0.03125; 0.03125}}
+	\label{fig:osccylinder}
+\end{figure}\todo{fix time label on 3rd row}
+
 
 \section{Oscillating Cylinder in no Flow}
 \label{sec:Oscillating Cylinder in no Flow}
+\todo[inline]{I AM HERE}
+f is 1
+find person to cite
+explain why it doesn't match validation exactly
 
+\begin{align}
+x&=\frac{-1}{2\pi}\sin{2\pi ft}\label{eq:cylinder position2}\\
+y&=-cos{2\pi ft}\;\label{eq:cylinder velocity2}
+\end{align}
 
 \section{Vorticity Induced Vibration}
-\subsection{Embedded Luo}
-\subsection{External Luo}
+domain
+equation for spring
+equation for motion
+cfl?
 
 \chapter{Conclusions}
 \section{Error Analysis}
+
+
 \subsection{Modified Fadlun}
 Cylinder
 osc cylinder
