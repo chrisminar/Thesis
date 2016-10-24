@@ -704,18 +704,35 @@ The implementation of the embedded Poisson equation is the same as outlined abov
 
 \chapter{Validation and Verification}\label{Validation}
 The solvers have been compared against five well known simulations and experiments.
-Table \ref{table:VV table} shows which solvers were used in each test.
-\todo{make table}
-\todo{describe why some solvers are not done with certain tests}
 Each simulation was chosen to test a specific capability of the solver and compound in difficulty.
-Lid Driven Cavity is the classic validation case for a laminar solver.
+Table below shows which immersed boundary method is used for each simulation.
+
+\begin{tabular}[htb]{ l | c | c | c |}\label{table:VV table}
+	\centering
+		& Fadlun & External & Embedded \\
+	\hline
+	Lid driven cavity & x & x & x \\
+	\hline
+	Impulsively started cylinder & \checkmark & \checkmark & \checkmark \\
+	\hline
+	Oscillating cylinder in flow & x & \checkmark & \checkmark \\
+	\hline
+	Oscillating cylinder in no flow & x & \checkmark & \checkmark \\
+	\hline
+	Vorticity induced vibration & x & \checkmark & \checkmark \\
+	\hline
+\end{tabular}
+\todo[inline]{fix table formating, add caption, add reference, correct spacing bwlow}
+
+Lid driven cavity is the classic validation case for a laminar solver.
 It tests discretization of the basic Navier--Stokes equation which includes the advection and diffusion terms, linear algebra and Dirichlet boundary conditions.
-The second simulation is an impulsively started cylinder which tests the immersed boundary and and the force calculation.
+As it does not have an immersed body, no IBM is used.
+The second simulation is an impulsively started cylinder which tests the immersed boundary and the force calculation.
 The third simulation tests the solvers ability to handle body with superscribed motion.
 In this test, a cylinder has a set sinusoidal motion in a stagnant flow.
-The fourth simulation has a set sinusoidal motion with a flow.
-Both of these tests look at the force calculation for a moving body and help quantify the numerical oscillation caused by direct forcing. 
-The last simulation is called Vorticity Induced Vibrations(VIV) and tests the solvers ability to accurately predict body location, velocity and force when the body motion isn't prescribed.
+The fourth simulation is another impulsively started cylinder but with a set cylinder motion.
+Tests three and four look at the force calculation for a moving body and help quantify the numerical oscillation caused by direct forcing. 
+The last simulation is called Vorticity Induced Vibration(VIV) and tests the solvers ability to accurately predict body location, velocity and force when the body motion isn't prescribed.
 
 \section{Lid Driven Cavity}
 \todo{cite verification}
@@ -893,12 +910,12 @@ In both figures, (a) is external interpolation and (b) is embedded interpolation
 \begin{figure}[h]
 	\centering
 	\begin{subfigure}{0.4\textwidth}
-		\includegraphics[width=\linewidth]{staticInitLuo}
+		\includegraphics[width=\linewidth]{staticexinit}
 		\caption{External interpolation method.}
 	\end{subfigure}
 	~
 	\begin{subfigure}{0.4\textwidth}
-		\includegraphics[width=\linewidth]{staticInitOsc}
+		\includegraphics[width=\linewidth]{staticeminit}
 		\caption{Embedded interpolation method.}
 	\end{subfigure}
 	\caption{Drag force verses time for the first period compared to steady state Liao et al. for an oscillating cylinder in no flow.}
@@ -908,12 +925,12 @@ In both figures, (a) is external interpolation and (b) is embedded interpolation
 \begin{figure}[h]
 	\centering
 	\begin{subfigure}{0.4\textwidth}
-		\includegraphics[width=\linewidth]{static2Luo}
+		\includegraphics[width=\linewidth]{staticexss}
 		\caption{External interpolation method.}
 	\end{subfigure}
 	~
 	\begin{subfigure}{0.4\textwidth}
-		\includegraphics[width=\linewidth]{static2Osc}
+		\includegraphics[width=\linewidth]{staticemss}
 		\caption{Embedded interpolation method.}
 	\end{subfigure}
 	\caption{Drag force verses time for steady state oscillating cylinder in now flow compared to Liao et al.}
@@ -1014,8 +1031,57 @@ Results are verified against the curvilinear immeresed boundary method of Borazj
 	\label{fig:viv4}
 \end{figure}
 
-\chapter{Conclusions}
-\section{Error Analysis}
+\chapter{Solver Characterization}
+This section will evaluate the different methods used in terms of order of accuracy and performance scaling. 
+The Fadlun, external and embedded methods will be evaluated using the impulsively started cylinder simulation and the external and embedded methods will be evaluated again using the the oscillating cylinder in flow.
+
+\section{Order of Accuracy}
+Order of accuracy is evaluated by using a simulating done with a fine grid as the 'exact' solution.
+Coarser grids have their error calculated using the exact solution and are plotted on a log scale to see effects of grid size on accuracy.
+All grid sizes will refer to the grid spacing in the middle, which is uniform.
+A grid spacing of 0.005 is used as the exact solution for the impulsively started cylinder test.
+Three coarser grids of spacing 0.025, 0.02 and 0.01 have their error plotted in Figure\ref{fig:cyerror}.
+\begin{figure}[h]
+	\centering
+	\begin{subfigure}{0.3\textwidth}
+		\includegraphics[width=\linewidth]{cyerrorfadlun}
+		\caption{Modified Fadlun method.}
+	\end{subfigure}
+	~
+	\begin{subfigure}{0.3\textwidth}
+		\includegraphics[width=\linewidth]{cyerrorexternal}
+		\caption{External interpolation method.}
+	\end{subfigure}
+	~
+	\begin{subfigure}{0.3\textwidth}
+		\includegraphics[width=\linewidth]{cyerrorembedded}
+		\caption{Embedded interpolation method.}
+	\end{subfigure}
+	\caption{Error plotted against grid spacing shows the order of accuracy for the three solvers.}
+	\label{fig:cyerror}
+\end{figure}
+as you can se...
+\todo{add some discussion about this garbage here}
+
+A grid spacing of 0.01 is used as the exact solution for the oscillating cylinder in flow simulation.
+Grid spacings of 0.0625, 0.03125 and 0.015625 are used for the coarser grids.
+Figure \ref{fig:oscerror} plots the error against the grid spacing for the external and embedded methods.
+\begin{figure}[h]
+	\centering
+	\begin{subfigure}{0.4\textwidth}
+		\includegraphics[width=\linewidth]{oscerrorexternal}
+		\caption{External interpolation method.}
+	\end{subfigure}
+	~
+	\begin{subfigure}{0.4\textwidth}\texttt{
+		\includegraphics[width=\linewidth]{oscerrorembedded}
+		\caption{Embedded interpolation method.}}
+	\end{subfigure}
+	\caption{Error plotted against grid spacing shows the order of accuracy for the two solvers on the oscillating cylinder in flow simulation.}
+	\label{fig:oscerror}
+\end{figure}
+ \todo[inline]{add discussion about this}
+\section{Performance Scaling}
 
 
 \subsection{Modified Fadlun}
@@ -1034,10 +1100,11 @@ osc cylinder
 viv
 	LC
 	SC
+	
+	
 
-\section{Performance Scaling}
-
-\chapter{Future Work}
+\chapter{Conclusions}
+\section{Future work}
 
 \bibliographystyle{plain}
 \bibliography{thesis}
