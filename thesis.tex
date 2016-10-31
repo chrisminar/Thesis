@@ -870,6 +870,7 @@ The modified Fadlun method appears to undergo numerical oscillations when stress
 This will be discussed more in section \ref{sec:cylinder error}.
 
 \section{Flow past an in-line oscillating cylinder}
+\label{sec:osccylinder}
 The impulsively started oscillating cylinder is a simulation used by Luo et al\cite{Luo:2012gx}. to demonstrate and compare the magnitude numerical oscillations between different IBMs.
 It is not a verification or validation as it doesn't compare the results to published work, rather it is a useful tool to visualize the numerical oscillations.
 A true moving body verification is done in the next section,\ref{sec:Oscillating Cylinder in no Flow}
@@ -1048,8 +1049,11 @@ This section will evaluate the different methods used in terms of order of accur
 The Fadlun, external and embedded methods will be evaluated using the impulsively started cylinder simulation and the external and embedded methods will be evaluated again using the the oscillating cylinder in flow.
 
 \section{Order of Accuracy}
-Order of accuracy is evaluated by using a simulation done with a fine grid as the 'exact' solution.
+Order of accuracy is evaluated by using a simulation evaluated with a fine grid as the 'exact' solution.
 Coarser grids have their error calculated using the exact solution and are plotted on a log scale to see effects of grid size on accuracy.
+As the Fadlun method has issues with numerical oscillations for a moving body, the order of accuracy will be examined for a stationary and moving immersed body.
+The impulsively started cylinder simulation and oscillating cylinder in flow will be used.
+\subsection{Impulsively started cylinder}
 All grid sizes will refer to the grid spacing in the middle, which is uniform.
 Grid spacings of \numlist{0.005; 0.005; 0.01} are used in the exact solution for the impulsively started cylinder test.
 Three coarser grids with spacing ranging from 0.625 to 0.01 have error calculated using the drag coefficient plotted in Figure~\ref{fig:cyerror}.
@@ -1073,71 +1077,159 @@ Three coarser grids with spacing ranging from 0.625 to 0.01 have error calculate
 	\label{fig:cyerror}
 \end{figure}
 
-While the external method shows an order of accuracy around two, the modified Fadlun and embedded methods appear to not become more accurate with decreasing grid size. 
+While the external method shows an order of accuracy around two, the modified Fadlun and embedded methods appear to not become more accurate with decreasing grid size. \todo{need an actual number for this}
 Let's start with embedded method. 
-Figure~\ref{fig:embedded005} shows the finest and second finest grid spacing.
+Figure~\ref{fig:embedded005} shows the drag force of the two finest grid spacings.
 The finest grid spacing has a small discontinuity at time 0.3 that none of the coarser grids have. 
-\begin{figure}[htb]
+The force error over time is shown in Figure~\ref{fig:embeddederror005}. 
+The error is dominated by the discontinuity at time 0.3 which causes poor order of accuracy results for the embedded method. 
+\begin{figure}[!htb]
 	\centering
-	\begin{subfigure}{0.3\textwidth}
+	\begin{subfigure}{0.4\textwidth}
 		\includegraphics[width=\linewidth]{embedded01}
 		\caption{Center spacing h=0.01}
 	\end{subfigure}
 	~
-	\begin{subfigure}{0.3\textwidth}
+	\begin{subfigure}{0.4\textwidth}
 		\includegraphics[width=\linewidth]{embedded015625}
 		\caption{Center spacing h=0.015625}
 	\end{subfigure}
-	\caption{Error plotted against grid spacing shows the order of accuracy for the three solvers.}
+	\caption{Drag force vs time for different grid spacings using the embedded solver.}
 	\label{fig:embedded005}
 \end{figure}
-\begin{figure}
+\begin{figure}[!htb]
 	\centering
 	\includegraphics[width=0.4\textwidth]{embedded_error_01}
-	\caption{Embedded method force error vs time for center grid spacing 0.01.}
+	\caption{Error in drag force vs time using the embedded method with a center grid spacing of 0.01.}
 	\label{fig:embeddederror005}
 \end{figure}
-\todo{add some discussion about this garbage here}
-\todo{ get error plot from 0-3}
-A grid spacing of 0.01 is used as the exact solution for the oscillating cylinder in flow simulation.
-Grid spacings of 0.0625, 0.03125 and 0.015625 are used for the coarser grids.
-Figure \ref{fig:oscerror} plots the error against the grid spacing for the external and embedded methods.
-\begin{figure}[h]
+\todo{some sort of explanation for this discontinuity?}
+
+The Fadlun method has a similar problem to the embedded method. 
+Figure~\ref{fig:fadlun005} shows the drag force produced with the modified Fadlun method with grid sizes of 0.005(finest) and 0.025(coarsest).
+The finest grid size for the Fadlun method, like the embedded method, also picks up a discontinuity in the force, although at a different time(0.7).
+Unlike the embedded method, the Fadlun method does not seem to be able to appropriately handle this jump and ends up creating numerical oscillations. 
+The coarsest grid does not pick up the discontinuity and returns a smooth drag curve. 
+
+\begin{figure}[!htb]
+	\centering
+	\begin{subfigure}{0.4\textwidth}
+		\includegraphics[width=\linewidth]{fadlun005}
+		\caption{Fadlun method: grid size 0.005}
+	\end{subfigure}
+	~
+	\begin{subfigure}{0.4\textwidth}
+			\includegraphics[width=\linewidth]{fadlun03}
+			\caption{Fadlun method: grid size 0.03}
+	\end{subfigure}
+	\caption{Drag force versus time with different grid sizes using the modified Fadlun method.}
+	\label{fig:fadlun005}
+\end{figure}
+\todo{do section on velocity based error plots...vorticity...pressure?}
+
+\subsection{Oscillating cylinder in flow}
+The embedded and external methods also have their order of accuracy tested using the in-line oscillating cylinder in flow simulation.
+The Fadlun method was not tested here because it proved too unstable to perform with varying grid sizes and time steps.
+Figure~\ref{fig:oscerror} shows the error vs grid spacing plots for the two methods. 
+Interestingly, the two methods have nearly the exact same order of accuracy even though the external method is known to have higher amplitude oscillations as shown in section \ref{sec:osccylinder}. 
+
+\todo{remake these with titles}
+\todo{calculate order of accuracy}
+\begin{figure}[!htb]
 	\centering
 	\begin{subfigure}{0.4\textwidth}
 		\includegraphics[width=\linewidth]{oscerrorexternal}
 		\caption{External interpolation method.}
 	\end{subfigure}
 	~
-	\begin{subfigure}{0.4\textwidth}\texttt{
+	\begin{subfigure}{0.4\textwidth}
 		\includegraphics[width=\linewidth]{oscerrorembedded}
-		\caption{Embedded interpolation method.}}
+		\caption{Embedded interpolation method.}
 	\end{subfigure}
 	\caption{Error plotted against grid spacing shows the order of accuracy for the two solvers on the oscillating cylinder in flow simulation.}
 	\label{fig:oscerror}
 \end{figure}
- \todo[inline]{add discussion about this}
-\section{Performance Scaling}
+\todo[inline]{add discussion about this}
 
+\section{Performance}
+Performance is evaluated by comparing the total number of cells and the computational time. 
+Typically, certain parts of the simulation take longer than others. 
+The Poisson step takes most of the time so iterations give a rough estimate of  time being spent in certain parts of the simulation.
+Figure~\ref{fig:iter} shows the number of iterations used for each Poisson solve. 
+(a), (b) and (c) show the iterations over time for an impulsively started cylinder simulation, and an external and embedded oscillating cylinder in flow simulation, respectively. 
+The iterations seem to be the largest when there is more change in the flow field. 
+For instance, in the impulsively started cylinder flow the iterations are  largest at the beginning because the flow fields are going from unity velocity and no pressure gradient to a fully developed boundary layer. 
+Note that (a) is solved using the external method which does not have any discontinuities or oscillations in the drag as seen in \ref{fig:embedded005} or \ref{fig:fadlun005}.
+The oscillating cylinder simulation spans two periods, x is zero at times 0, 5 and 10. 
+With the embedded method, low Poisson iterations correspond with less numerical iterations. 
+The peaks in the external method seem to happen when the oscillations go from low to high, although the iterations go back down while there is still high numerical oscillation. 
+\begin{figure}[htb]
+	\centering
+	\begin{subfigure}{0.3\textwidth}
+		\includegraphics[width=\linewidth]{cy_iter}
+		\caption{Impulsively started cylinder}
+	\end{subfigure}
+	~
+	\begin{subfigure}{0.3\textwidth}
+		\includegraphics[width=\linewidth]{ex_iter}
+		\caption{External oscillating cylinder}
+	\end{subfigure}
+	~
+	\begin{subfigure}{0.3\textwidth}
+		\includegraphics[width=\linewidth]{em_iter}
+		\caption{Embedded oscillating cylinder}
+	\end{subfigure}
+	\caption{Poisson iterations taken to each time step. From left to right: Impulsively started cylinder w/ external method, in-line oscillating cylinder in flow w/ external method, in-line oscillating cylinder in flow w/ embedded method.}
+	\label{fig:iter}
+\end{figure}
 
-\subsection{Modified Fadlun}
-Cylinder
-osc cylinder
-viv
-\subsection{Embedded Luo}
-Cylinder
-osc cylinder
-viv
-	LC
-	SC
-\subsection{External Luo}
-Cylinder
-osc cylinder
-viv
-	LC
-	SC
+\subsection{Impulsively started cylinder}
+
+Performance of the impulsively started cylinder simulation is evaluated using the same set of simulations as the order of accuracy. 
+Figure~\ref{fig:cyperf} shows the performance of all three methods.
+\begin{figure}[!htb]
+	\centering
+	\includegraphics[width=0.4\textwidth]{cylinder_performance}
+	\caption{Impulsively started cylinder performance.}
+	\label{fig:cyperf}
+\end{figure}
+It seems counter intuitive that the external method, which is more complex than the Fadlun method performs worse. 
+This trend surfaces because of the GPU.
+While the external method has complex additional steps, they all end up being fairly trivial to solve on a GPU. 
+The computational time to solve the interpolations and extrapolations are irrelevant when compared to the Poisson solution. 
+In fact, the computational time for all three methods, across every type of simulation, is always dominated by the Poisson solver. 
+The question is foreshadowed by Figure~\ref{fig:iter}, why does time the Poisson solver take longer to solve different methods?
+Answering this question requires another look at the linear multi-grid method solver used to solve the Poisson equation. 
+Figure~\ref{fig:gridreduce} shows the reduction of the Poisson stencil. 
+(a) shows the standard stencil that is used for most nodes. 
+The modified Fadlun and embedded methods use non-standard stencils near the body because they are both enforcing boundary conditions inside of the Poisson linear algebra. 
+An example of an atypical stencil, one of the possible stencils for an embedded method hybrid node, is shown in (b). 
+Linear algebra solvers commonly encounter tri-diagonal, or banded tri-diagonal
+matrices that spawn from one, two and three dimensional Poisson equations.
+As such, most linear algebra solves are highly optimized algorithms to deal with those types of matrices. 
+When non-standard stencils get thrown at the solver, like those found near the body for the embedded method, the solver is unable to efficiently solve the system of equations resulting in more iterations per solve and a longer computational time. 
+The external solver is the fastest because it uses the standard Poisson stencil for the entire domain. 
+It is worth noting the difference in slope between the three solvers' performance curves. 
+Theoretically a multi-grid method should not quadrouple in time when the the grid spacing halves, it should just add another layer to the grid reduction step.
+While the Fadlun and external methods have roughly the same slope, the embedded method is much steeper. 
+This implies that the multi-grid method is handling the different abnormal Poisson stencils differently. 
+It could be that, because there are multiple different stencils used for the hybrid and ghost nodes that are clustered together, the multi-grid method is not sufficiently able to reduce the grid. 
+That could explain the higher order of magnitude of computation time seen with increasing cell count. 
+
+\begin{figure}[!htb]
+	\centering
+	\begin{subfigure}{0.6\textwidth}
+		\includestandalone[width=\linewidth]{grid_reduction}
+		\caption{Reduction of the standard Poisson stencil.}
+	\end{subfigure}
 	
-	
+	\begin{subfigure}{0.6\textwidth}
+		\includestandalone[width=\linewidth]{grid_reduction2}
+		\caption{Reduction of a hybrid node Poisson stencil.}
+	\end{subfigure}
+	\caption{Grid reduction that takes place inside of the linear multi-grid solver.}
+	\label{fig:gridreduce}
+\end{figure}
 
 \chapter{Conclusions}
 \section{Future work}
