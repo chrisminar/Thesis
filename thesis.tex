@@ -16,7 +16,7 @@ The massive parallelism enabled by GPU architecture enables high performance, of
 However, fully harnessing GPU parallelism requires specialized algorithms and computing strategies.
 This work modifies a direct-forcing immersed boundary method to model fluid-structure interaction and investigates its behavior on GPUs.
 We performed verification of our solver using lid-driven cavity flow and impulsively started flow over a cylinder, and investigated its behavior with flow over a forced oscillating cylinder.}
-\acknowledgements{We gratefully acknowledge the support of NVIDIA Corporation with the donation of the Tesla K\subsubsection0 GPU used for this research.
+\acknowledgements{We gratefully acknowledge the support of NVIDIA Corporation with the donation of the Tesla K20 GPU used for this research.
 We also thank the Barba Group for developing, maintaining, and distributing their cuIBM code.}
 
 \usepackage{algorithm}
@@ -43,43 +43,45 @@ We also thank the Barba Group for developing, maintaining, and distributing thei
 
 
 \begin{document}
-\todo[inline]{fix margins}
-\todo[inline]{change Fadlun to fadlun et al}
 \maketitle
 
 \mainmatter
 
 \chapter{Introduction}
-Immersed boundary methods (IBMs) are a broad term referring to of group of approaches used for simulating fluid flow over complex bodies.
-The goal of IBMs is to represent a surface on a structured grid, removing the need to create a body fitted mesh.
-These techniques are well-suited for simulating flow involving complex moving bodies because they do not require re-meshing between time steps.
+The 'Immersed boundary method' (IBM) is a broad term referring to a group of approaches used to simulate fluid flow over complex bodies.
+The goal of IBMs is to represent a body surface withing resorting to a body fitted mesh.
+These techniques are well-suited for simulating flow involving complex, moving bodies because they do not require re-meshing between time steps.
 We have developed an IBM solver for operation on graphics processing units (GPUs) designed to handle incompressible fluid--structure interaction problems with rigid bodies.
 
-Peskin~\cite{Peskin:1972gh} first introduced the IBM in the 1970s to model blood flow with elastic boundaries.
-The original IBM adds a forcing term to the Navier--Stokes equations that only acts near a body.
-This forcing term simulates the force the body applies on the fluid, and is modeled as a spring.
-Peskin's IBM was designed to handle elastic, deforming bodies.
-One way to effectively implement Peskin's IBM for rigid bodies is to set a large spring coefficient; however, this makes the equations numerically stiff.
+Peskin~\cite{Peskin:1972gh} created the original IBM in the 1970s to model blood flow through arteries. 
+He used the IBM to more easily represent the moving, elastic boundaries.
+The original IBM adds a forcing term to the Navier--Stokes equations that represents the force a body would apply the fluid, if it were there.
+This forcing term is modeled as a spring, $f=kx$, along with a Dirac-delta function to ensure the force only acts upon fluid nodes near the body.
+Modeling the force as a spring worked well for Peskin's purpose but proved to have several shortcomings.
+Firstly, solving for the forcing term is tedious, and the order of accuracy heavily depends on how it and the delta function are handled. \todo{site this}
+Secondly, to apply the spring model to rigid bodies, a very large spring coefficient must be used which has the inadvertent effect of making the problem stiff. 
 
-The IBM has since evolved to be applicable to a wide range of problems, as reviewed by Mittal and Iaccarino~\cite{Mittal:2005ii} and more recently Sotiropoulos and Yang~\cite{Sotiropoulos:2014gv}.
-Mohd-Yusof~\cite{MohdYusof:1997wh} and Fadlun et al.~\cite{Fadlun:2000fl} developed a version for rigid bodies called the direct forcing method.
-Instead of solving for the added force term in the Navier--Stokes equation, the velocities at the nodes nearest to the body are interpolated for using the body velocity to enforce the no-slip condition.
-However, using the direct forcing method with a moving body causes numerical oscillations~\cite{liao2010simulating}~\cite{Luo:2012gx}.
-This effect is manageable for preset motion but with a freely moving body the solver will poorly predict body position, velocity, and forces.
-The numerical oscillations are caused by nodes switching representations between time steps, e.g., a node near the body (and thus treated differently) becoming a node solved for with the Navier--Stokes equations.
-The approach of Luo et al.~\cite{Luo:2012gx} deals with the numerical oscillations by using a weighting function to transition between the two schemes.
-
-The goal of this project is to develop a GPU-based solver capable of simulating 2D, incompressible flow over a moving, complex body. 
-\todo[inline]{write end purpose of solver}
-\todo[inline]{give solver a name}
+The IBM has since evolved to be applicable to a wide range of problems, as reviewed by Mittal and Iaccarino~\cite{Mittal:2005ii} and more recently Sotiropoulos and Yang~\cite{Sotiropoulos:2014gv}. 
+The methods focused on in this work are all from a popular subgroup of IBM called direct forcing methods. 
+Mohd-Yusof~\cite{MohdYusof:1997wh} and Fadlun et al.~\cite{Fadlun:2000fl} developed two early versions of direct forcing.
+In direct forcing, the velocities at the nodes nearest to the body are interpolated for using the body velocity, eliminating the need to solve for a forcing term while simultaneously enforcing the no-slip condition.
 \todo[inline]{add segment about lee and lee}
-Chapter \ref{Numerical Methods} will discuss the theory of several direct forcing methods and their applicability to freely moving bodies. 
-Chapter \ref{Implementation} cover the discretization of the methods as well as the challenges, strategies and implementation of the GPU.
-Chapter \ref{Validation} will show the validation and verification of different aspects of the solver using five different test cases; lid driven cavity, flow over an impulsively started cylinder, forced motion of a cylinder in static flow, forced motion of a cylinder in flow and vorticity induced vibrations (VIV).
-\todo[inline]{make sure that is the correct words for VIV}
+However, using the direct forcing method with a moving body causes numerical oscillations~\cite{liao2010simulating}~\cite{Luo:2012gx}.
+This effect is manageable for preset motion but with a freely moving body the solver will poorly predict body position, velocity, and forces. 
+The numerical oscillations are caused by having different equations being used to solve for velocity in different regions of the domain. 
+Luo et al.~\cite{Luo:2012gx} deals with the numerical oscillations by using a weighting function to transition between the two schemes, removing the discontinuity.
+
+The goal of this project is to develop a GPU-based solver called cuIBM-FSI for CUda(CUDA is the language used to write for the GPU) Immersed Boundary Method Fluid Structure Interaction. 
+The eventual purpose of cuIBM-FSI is to have a highly efficient solver to study and optimize wave energy converters. 
+To those ends, this thesis will show that cuIBM-FSI capable of simulating 2D, incompressible flow over a freely moving body. 
+
+Chapter \ref{chapter:Numerical Methods} will discuss the theory of several direct forcing methods and their applicability to freely moving bodies. 
+Chapter \ref{chapter:Implementation} covers the discretization of various methods as well as the challenges, strategies and implementation of the GPU.
+Chapter \ref{chapter:Validation} will show the validation and verification of different aspects of the solver using five different test cases; lid driven cavity, flow over an impulsively started cylinder, forced motion of a cylinder in static flow, forced motion of a cylinder in flow and vorticity induced vibrations (VIV). 
+Chapter \ref{chapter:error} characterizes cuIBM-FSI in terms of order of accuracy and performance scaling. 
 The final chapter will discuss the results, go over problems and recommend future work.
 
-\chapter{Numerical Methods}\label{Numerical Methods}
+\chapter{Numerical Methods}\label{chapter:Numerical Methods}
 Fluid flow is governed by the two-dimensional, incompressible form of the Navier--Stokes and mass continuity equations:
 \begin{align}
 \frac{\partial \textbf{u}}{\partial t} + \nabla ( \textbf{uu} ) &= -\nabla p + \nu\nabla^{2}\textbf{u} + \textbf{f} \label{eq:NavierStokes} \\
@@ -277,7 +279,7 @@ If the hybrid node only has one neighbor, then $\Delta=0$ for the other directio
 	\label{fig:Weight}
 \end{figure}
 
-\chapter{Implementaiton and Discretization}\label{Implementation}
+\chapter{Implementaiton and Discretization}\label{chapter:Implementation}
 
 This chapter will detail the discretization of the immersed boundary method and implementation on the GPU. 
 
@@ -702,7 +704,7 @@ Finally, $\hat{\textbf{u}}$ is calculated using a linear algebra solver.
 The implementation of the embedded Poisson equation is the same as outlined above.
 
 
-\chapter{Validation and Verification}\label{Validation}
+\chapter{Validation and Verification}\label{chapter:Validation}
 The solvers have been compared against five well known simulations and experiments.
 Each simulation was chosen to test a specific capability of the solver and compound in difficulty.
 Table below shows which immersed boundary method is used for each simulation.
@@ -1045,6 +1047,7 @@ Results are verified against the curvilinear immeresed boundary method of Borazj
 \end{figure}
 
 \chapter{Solver Characterization}
+\label{chapter:error}
 This section will evaluate the different methods used in terms of order of accuracy and performance scaling. 
 The Fadlun, external and embedded methods will be evaluated using the impulsively started cylinder simulation and the external and embedded methods will be evaluated again using the the oscillating cylinder in flow.
 
@@ -1199,7 +1202,7 @@ While the external method has complex additional steps, they all end up being fa
 The computational time to solve the interpolations and extrapolations are irrelevant when compared to the Poisson solution. 
 In fact, the computational time for all three methods, across every type of simulation, is always dominated by the Poisson solver. 
 The question is foreshadowed by Figure~\ref{fig:iter}, why does time the Poisson solver take longer to solve different methods?
-Answering this question requires another look at the linear multi-grid method solver used to solve the Poisson equation. 
+Answering this question requires another look at the linear multi-grid method. 
 Figure~\ref{fig:gridreduce} shows the reduction of the Poisson stencil. 
 (a) shows the standard stencil that is used for most nodes. 
 The modified Fadlun and embedded methods use non-standard stencils near the body because they are both enforcing boundary conditions inside of the Poisson linear algebra. 
