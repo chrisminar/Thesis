@@ -63,7 +63,7 @@ Secondly, to apply the spring model to rigid bodies, a very large spring coeffic
 
 The IBM has since evolved to be applicable to a wide range of problems, as reviewed by Mittal and Iaccarino~\cite{Mittal:2005ii} and more recently Sotiropoulos and Yang~\cite{Sotiropoulos:2014gv}. 
 The methods focused on in this work are all from a popular subgroup of IBM called direct forcing methods. 
-Mohd-Yusof~\cite{MohdYusof:1997wh} and Fadlun et al.~\cite{Fadlun:2000fl} developed two early versions of direct forcing.
+Mohd-Yusof~\cite{MohdYusof:1997wh} and Fadlun et al.~\cite{Fadlun:2000fl} developed two early versions of direct forcing. 
 In direct forcing, the velocities at the nodes nearest to the body are interpolated for using the body velocity, eliminating the need to solve for a forcing term while simultaneously enforcing the no-slip condition.
 \todo[inline]{add segment about lee and lee}
 However, using the direct forcing method with a moving body causes numerical oscillations~\cite{liao2010simulating}~\cite{Luo:2012gx}.
@@ -82,138 +82,164 @@ Chapter \ref{chapter:error} characterizes cuIBM-FSI in terms of order of accurac
 The final chapter will discuss the results, go over problems and recommend future work.
 
 \chapter{Numerical Methods}\label{chapter:Numerical Methods}
-Fluid flow is governed by the two-dimensional, incompressible form of the Navier--Stokes and mass continuity equations:
+cuIBM-FSI is comprised of three separate solvers. 
+The first is modified from the work of Fadlun et al~\cite{Fadlun:2000fl}. 
+Solvers two and three are both based off the work of Luo et al~\cite{Luo:2012gx}. 
+For now, it will suffice to call these the modified Fadlun, external and embedded methods and leave their explanations for later. 
+
+
+All of these methods, however, stem from the two-dimensional, incompressible form of the Navier--Stokes momentum and mass continuity equations:
 \begin{align}
-\frac{\partial \textbf{u}}{\partial t} + \nabla ( \textbf{uu} ) &= -\nabla p + \nu\nabla^{2}\textbf{u} + \textbf{f} \label{eq:NavierStokes} \\
+\frac{\partial \textbf{u}}{\partial t} + \nabla ( \textbf{uu} ) &= -\nabla p + \nu\nabla^{2}\textbf{u} \label{eq:NavierStokes} \\
 \nabla \cdot \textbf{u} &= 0 \label{eq:Continuity} \;.
 \end{align}
 Here, $u$ is velocity, $p$ is pressure and $\nu$ is the constant kinematic viscosity.
-\todo[inline]{what is f}
 
 \section{Navier--Stokes Fractional Step}\label{NM:NavierStokes}
-Equations \eqref{eq:NavierStokes} and \eqref{eq:Continuity} are solved using the fractional step method (e.g., \cite{Perot1993}). 
-In the first step, an advection-diffusion equation without pressure is used to calculate an intermediate velocity:
+All three methods use fractional step~\cite{Perot1993} to solve Equations \eqref{eq:NavierStokes} and \eqref{eq:Continuity}. 
+The fractional step method breaks up the discretization of the Navier--Stokes equations. 
+Specifically, each discretized time step is comprised of three sub steps.
+In the first sub step, the momentum equations are solved without pressure to  calculate an intermediate velocity:
 \begin{equation}\label{eq:Intermediate Velocity}
 \hat{\textbf{u}} - \frac{\Delta t}{2}L(\hat{\textbf{u}}) = \textbf{u}^n + \Delta t(\textbf{RHS}^n) \;,
 \end{equation}
-where $\hat{\textbf{u}}$ is the intermediate velocity, $\Delta t$ is the time step, $L$ is the Laplacian operator and $\textbf{RHS}$ is the explicit, discretized advection and diffusion terms.
-The superscript $n$ represents the time step.
-In time, second-order Adams--Bashforth and Crank--Nicolson methods are used to discretize the advection and diffustion terms, respectively.
-\todo[inline]{move this line to the implementation section}
+where $\hat{\textbf{u}}$ is the intermediate velocity, $\Delta t$ is the time step, $L$ is the Laplacian operator and $\textbf{RHS}$ is the discretized advection and diffusion terms. 
+The superscript $n$ represents the time step. 
+In time, second-order Adams--Bashforth and Crank--Nicolson methods are used to discretize the advection and diffusion terms, respectively. 
 
-In the second step, the continuity equation is imposed to approximate the pressure, $p$:
+In the second sub step, the continuity equation is imposed to approximate the pressure, $p$, resulting in the Poisson equation:
 \begin{equation}\label{eq:Poisson}
 \nabla^2p^{n+1} = - \frac{\nabla\hat{\textbf{u}}}{\Delta t} \;,
 \end{equation}
 
-Velocity is updated in the last step with:
+Velocity is updated in the last sub step with:
 \begin{equation}\label{eq:Projection}
 \textbf{u}^{n+1} = \hat{\textbf{u}} - \Delta t\nabla p^{n+1} \;.
 \end{equation}
 
 \section{Node Identification}
-To facilitate the discussion of IBMs the nomenclature with regards to point identification will be touched on here. 
+To facilitate the discussion of IBMs the nomenclature with regards to point identification will be explained here. 
 The nomenclature is mostly adopted from the work of Luo et al.\cite{Luo:2012gx}
-\todo[inline]{add figure for node identification}
-\todo[inline]{add text for node identification}
+There are four types of nodes. 
+Not all of them are used in each method, and the methods treat nodes differently. 
+Nodes immediately outside the body are hybrid nodes. 
+In all three methods, the hybrid nodes are interpolated for using the body and second nearest node.
+Nodes immediately inside the body are ghost nodes. 
+The Fadlun(and modified Fadlun) method doesn't use these but the external and embedded methods both try to set these values in a way that enforces the body, more on this in section~\ref{Sec:Field Extrapolation}. \todo[inline]{cite mittal?}
+Everything outside of the body that ins't a hybrid node is a fluid node.
+Fluid nodes are solved by the unmodified Navier--Stokes equations. 
+Everything else (all nodes inside the body that are not ghost nodes) are solid nodes. 
+The treatment of solid nodes doesn't effect the solution. 
+It does effect the computational time. 
+The Poisson equation tends to solve the fastest when a standard five point stencil is used.
+When the solid nodes use a five point stencil an arbitrary flow field will develop inside the body. \todo{this section is sloppy and could use some tinkering}
+Figure~\ref{fig:node id} demonstrates. 
 
-\begin{figure}[htb] %this should probably go somehwer eelse
-    \centering
-    \includestandalone[width=0.5\linewidth]{basic_interp_figure}
-    \caption{A simplified diagram of linear interpolation for velocity values at the hybrid node}
-    \label{fig:2}
+\begin{figure}[!htb]
+	\centering
+	\includestandalone[width=0.5\linewidth]{node_id}
+	\caption{Node identification near the body}
+	\label{fig:node id}
 \end{figure}
 
 \section{Fadlun}
-In Peskin's\cite{Peskin:1972gh} IBM the forcing term $f$ in Equation \eqref{eq:NavierStokes} is solved for at the hybrid nodes in a way that enforces no-slip. 
-In the direct forcing methods developed by Fadlun\cite{Fadlun:2000fl} and Yusof\cite{MohdYusof:1997wh} the navier stokes equation isn't solved at the hybrid nodes. 
-Instead, the velocity at the hybrid node is approximated by linearly interpolating between the second hybrid node and the body surface. 
-As explained by Fadlun it is appropriate to enforce this approximation in the intermediate velocity step.
-\todo[inline]{why is it appropriate to enforce this in the intermediate velocity step}
+In Peskin's\cite{Peskin:1972gh} original IBM(Peskin has developed many iterations of the IBM) a forcing term $f$ in Equation \eqref{eq:NavierStokes} is solved for at the hybrid nodes in a way that enforces no-slip. 
+In the direct forcing methods developed by Fadlun\cite{Fadlun:2000fl} and Yusof\cite{MohdYusof:1997wh} the Navier--Stokes equation isn't solved at the hybrid nodes. 
+Instead, the velocity at the hybrid node is approximated by linearly interpolating between the second closest node and the body surface as seen in Figure~\ref{fig:2}. 
+\begin{figure}[!htb]
+	\centering
+	\includestandalone[width=0.5\linewidth]{basic_interp_figure}
+	\caption{A simplified diagram of linear interpolation for velocity values at a hybrid node}
+	\label{fig:2}
+\end{figure}
+At this point a clever observer might notice a complication induced by the fractional step method. 
+Which is correct, to enforce no slip to the intermediate velocity in the first sub step, or to velocity during the third sub step? 
+Fadlun found that when no-slip is applied during the intermediate time step, the error introduced in the velocity correction step was always negligibly small compared to the velocity. 
 \todo[inline]{when is this approximation not viable?}
-\todo[inline]{figure to demonstrate linear interpolation}
-$\textbf{RHS}$ and $1-\frac{\Delta t}{2}L$ from Equation \eqref{eq:Intermediate Velocity} can be setup as if they was no body, then modified at the hybrid nodes to enforce no slip with the linear interpolation.
-The discretization of this is shown in appendix \ref{Fadlun Linear Interpolation}
-\todo[inline]{add reference to the discretization of the normal part of RHS and LHS}
-The Poisson Equation \ref{eq:Poisson} and projection step \ref{eq:Projection} are left unmodified in the work of Fadlun et al.
+$\textbf{RHS}$ and $1-\frac{\Delta t}{2}L$ from Equation \eqref{eq:Intermediate Velocity} can be setup as if they was no body, then modified at the hybrid nodes to enforce no slip with the linear interpolation. 
+The discretization of this is shown in appendix \ref{Fadlun Linear Interpolation}. 
+The Poisson Equation \ref{eq:Poisson} and projection step \ref{eq:Projection} are left unmodified in the work of Fadlun et al. 
 
-\section{Modified Fadlun}
-If the Poisson equation  equation to account for the presence of a body, the continuity equation will not be satisfied. 
+\section{Modified Fadlun} 
+In the impulsively started cylinder simulation, section \ref{sec:cylinder}, the Fadlun method proved mediocre at predicting force in the transient section (while the boundary layer was developing). 
+This happens because the Poisson equation is not modified to account for the presence of a body causing the continuity equation will not be satisfied. 
+There are many proposed and tested solutions to this issue. 
 Depending on the type of simulation this can create significant creation or destruction of mass at the body, leading to poor solver accuracy.
-Researchers following \todo[]{find researchers} Fadlun et al. suggested several different ways to solve this problem.
-\todo[inline]{outline lee lee method}
-\todo[inline]{explain my method}
+Kim et al~\cite{kim2001immersed}. added mass source or sink terms to the continuity equations at cells cut by the body surface. 
+Mittal et al\cite{mittal2008versatile}. imposes no-slip by extrapolating velocity data outside the body to ghost nodes. 
+Luo et al\cite{Luo:2012gx}. also extrapolates inwards in addition to enforcing an approximate pressure boundary condition. 
+cuIBM-FSI's modified Fadlun method uses a cut cell approach to fix the mass continuity issue. 
+This is explained in more detail in section~\ref{sec:modified fadlun}.
 
 \section{Luo}
 
-Direct forcing methods suffer from numerical oscillation when the immersed body is moving.
-\todo[inline]{cite oscillations in direct forcing}
+Direct forcing methods suffer from numerical oscillation when the immersed body is moving~\cite{Sotiropoulos:2014gv}~\cite{Mittal:2005ii}~\cite{liao2010simulating}.
 As the body moves, background nodes change how they calculate values. 
 For example Figure~\ref{fig:Temporal Discontinuity} depicts a bulk fluid $u$ velocity node at time step $t^n$ become a hybrid node at time step $t^{n+1}$.
-As the node transitions the intermediate velocity will change from being calculated by Equation ~\eqref{eq:Intermediate Velocity} to Equation.
-\todo[inline]{add equation and reference to equation the does the linear interpolation}
-Equations \eqref{eq:Intermediate Velocity} and \todo[]{add eq ref} are both correct representations for the intermediate velocity but they have different errors associated with them which causes the calculated velocity to be slightly different.
-This discontinuous change in velocity is responsible for the numerical oscillations.
-\todo[inline]{reference luo et al somewhere in this explanation}
+As the node transitions the intermediate velocity will change from being calculated by Navier--Stokes (Equation ~\eqref{eq:Intermediate Velocity}) to an interpolation (Equation~\eqref{eq:ID intermediate velocity interpolation} or \eqref{eq:Interpolation}). 
+Both equations are correct representations for the intermediate velocity but they have different errors associated with them which causes the calculated velocity to be slightly different. 
+This discontinuous change in velocity is responsible for the numerical oscillations. 
 Note that this effect happens whenever any node transitions, not just the intermediate $u$ velocity nodes.
-\todo[inline]{give a more in depth look at the math that happens which causes this error to happen?}%maybe this should go somewhere else.
 
-\begin{figure}[htb]
+\begin{figure}[!htb]
     \centering
     \includestandalone[width=0.5\linewidth]{figure/node_transition_figure}
     \caption{A diagram illustrating the immersed body's interaction with the background grid that causes numerical oscillations.}
     \label{fig:Temporal Discontinuity}
 \end{figure}
 
-The field values (velocity and pressure) are extrapolated across the body such that Eq.~\eqref{eq:NavierStokes} can be solved at the hybrid nodes using a standard stencil. 
-This process is elaborated on in section \ref{Sec:Field Extrapolation}. 
-In the method proposed by Luo et al.~\cite{Luo:2012gx}, the field values at the hybrid nodes are calculated via both Navier--Stokes and interpolation. 
-The final field values are calculated using a weighted combination of both solutions.
+In the method proposed by Luo et al.~\cite{Luo:2012gx}, hybrid node values are calculated via both Navier--Stokes and interpolation.
+The final value at the hybrid node is a weighted combination of both solutions. 
 The weighting is designed smooth the transition between solutions. 
 When the hybrid node is close to the body, it will be dominated by the interpolated solution, while a the hybrid node far from the body will be dominated by the Navier--Stokes solution. 
-This process is elaborated on in section \ref{Sec:Weighting}
+This process is elaborated on in section \ref{Sec:Weighting}. 
+To get a valid result at the hybrid nodes using the Navier--Stokes equations the field values (velocity and pressure) must be extrapolated across the body using appropriate boundary conditions. 
+This process is elaborated on in section \ref{Sec:Field Extrapolation}. 
+
 
 \subsection{Field extrapolation to ghost nodes}
 \label{Sec:Field Extrapolation}
 
-Navier--Stokes can be used to calculate values at the hybrid nodes if the ghost nodes are modified to correctly represent the presence of the body.
-A simple example of this can be seen in Figure~\ref{Fig: Simple Interpolation}.
-If the slope of velocity between the hybrid node and the body is assumed to be linear then the slope can be extrapolated inwards to the ghost node.
-When Navier--Stokes is then solved, the fluid velocity at the body surface will be calculated as the velocity of the body, mimicking the no slip boundary condition.
-\begin{figure}[htb]
+Navier--Stokes can be used to calculate values at the hybrid nodes if the ghost nodes are modified to correctly represent the presence of the body. 
+If the slope of velocity between the hybrid node and the body is assumed to be linear then the slope can be extrapolated inwards to the ghost node. 
+A simple example of this can be seen in Figure~\ref{Fig: Simple Interpolation}. 
+The ghost node is set such that the velocity is zero via linear interpolation between the ghost and hybrid nodes. 
+When Navier--Stokes is then solved, the fluid velocity at the body surface will be calculated as the velocity of the body, mimicking the no slip boundary condition. 
+\begin{figure}[!htb]
 	\centering
 	\includestandalone[width=0.5\linewidth]{basic_extrapolation}
 	\caption{A simple 1D, linear extrapolation example}
 	\label{Fig: Simple Interpolation}
 \end{figure}
-
-Field values are extrapolated across the body using a 2D bilinear method described in Luo et al.~\cite{Luo:2012gx}.
-Unlike Luo et al., the solver uses a staggered grid, causing the extrapolation process to have three variations; one for pressure nodes and ones for u and v velocity nodes.
-Field values are first interpolated at an image point (IP) outside the body using the surrounding field values and the boundary condition. 
-The 2D bilinear interpolation approximates the field between four nodes surrounding the IP with Equation~\eqref{eq:Interpolation}.
-\todo[inline]{move equation up}
-The four interpolation nodes are used to set up a system of equations to solve for the coefficients, which can then be used to solve for the field values. 
-Some of the interpolation nodes will be moved to account for the presence of the body as seen in Figure~\ref{fig:Ghost node extrapolation}.
+In the actual Luo et al~\cite{Luo:2012gx}. method, field values are extrapolated across the body using 2D bilinear interpolation.
+Unlike Luo et al., cuIBM-FSI uses a staggered grid, causing the extrapolation process to have three variations; one for pressure and ones for $u$ and $v$ velocity nodes. 
+Values are first interpolated for at an image point outside the body using the surrounding field values and the boundary condition. 
+The 2D bilinear interpolation approximates the field between four nodes surrounding the image point with Equation~\eqref{eq:Interpolation}. 
+Each node surrounding the image point is used to set up a system of four equations to solve for the coefficients of~\eqref{eq:Interpolation}, which can then be used to solve for the field values. 
+Some of the interpolation nodes will be moved to account for the presence of the body.
+In Figure~\ref{fig:Ghost node extrapolation} the bottom left corner of each interpolation region is moved to the body intercept.
 \begin{figure}[htb]
 	\centering
 	\includestandalone[width=0.5\linewidth]{GN_interp_figure}
-	\caption{A detailed schematic u velocity extrapolation to ghost nodes.}
+	\caption{A detailed schematic $u$ velocity extrapolation to ghost nodes.}
 	\label{fig:Ghost node extrapolation}
 \end{figure}
 
-The ghost nodes(GN), indicated by solid squares, are projected onto the surface to find the body intercept(BI), indicated by the thick open circle.
-\todo[inline]{change diagram to not have two open circles, its confusing}
-Body nodes used to track the body's position are not the same as the BI and the two are typically not coincident.
-If the body has curvature, the body intercept will not fall exactly on the body.
-The line drawn between the BI and GN will be perpendicular to the tangent line at the BI.
-That line is then mirrored over the surface to find the IP, indicated by the solid triangle. 
+The ghost nodes, indicated by solid squares, are projected onto the surface to find the body intercept, indicated by the thick open circle. 
+Body nodes used to track the body's position are not the same as the body intercept and the two are typically not coincident. 
+If the body has curvature, the body intercept will not fall exactly on the body due to the discrete representation of the body. 
+The line drawn between the body intercept and ghost node will be perpendicular to the tangent line at the body intercept, i.e. the ghost node is projected along the surface normal. 
+That line is then mirrored over the surface to find the image point, indicated by the solid triangle. 
 
-The four field values surrounding the IP are used to interpolate for the field value at the IP using equation~\eqref{eq:Interpolation}. 
-If one of the four interpolation nodes is inside the body, as seen in the extrapolation for GN 1 in Figure~\ref{fig:Ghost node extrapolation}, then that node is moved to the BI and the boundary condition is used.
-If none of the four field values are inside the body as seen in the extrapolation for GN 2 then the node closest to the BI is moved to the BI.
-To satisfy the no slip condition at the body, a Dirichlet boundary condition equal to the body velocity is used when extrapolating for velocity GNs. 
-The Neumann Equation~\eqref{eq:Neumann}, is used to approximate the pressure boundary condition.
-A system of equations is set up to solve for the $a$ coefficients in Equation~\eqref{eq:Interpolation}.
+The rules to determine which values are used to interpolate for the image point are as follows:
+If one of the four interpolation nodes is inside the body, as seen in the extrapolation for GN 1 in Figure~\ref{fig:Ghost node extrapolation}, then that node is moved to the body intercept and the boundary condition is used. 
+It is possible for multiple corners to be inside the body. 
+Any corner inside the body will always be a ghost node and have its own, corresponding body intercept. 
+All corners inside the body are moved to their corresponding BI such that there are always four corners in separate locations to use for the interpolation. 
+If none of the four field values are inside the body as seen in the extrapolation for GN 2 then the node closest to the body intercept is moved to the body intercept.
+To satisfy the no slip condition at the body, a Dirichlet boundary condition equal to the body velocity is used when extrapolating for velocity ghost nodes. 
+The pressure boundary condition is approximated by forcing the slope of pressure normal to the body surface, $\frac{dp}{dn}$, as constant using the Neumann Equation~\eqref{eq:Neumann}. 
+Using the relocated corners, a system of equations is set up to solve for the coefficients in Equation~\eqref{eq:Interpolation}.
 Pressure nodes on the body use Equation~\eqref{eq:Neumann Node} in the system, which is simply the derivative of Equation~\eqref{eq:Interpolation}. 
 \begin{align}
 \phi (x,y) = a_0 + a_1 x + a_2y + a_3 x y \label{eq:Interpolation} \\
@@ -224,9 +250,9 @@ Pressure nodes on the body use Equation~\eqref{eq:Neumann Node} in the system, w
 $\phi$ is the variable being interpolated ($u$, $v$, or pressure); $a_0$, $a_1$, $a_2$ and $a_3$ are coefficients, and $x$ and $y$ give the node location.
 $\rho$ is the density, $D\textbf{u}\left/Dt\right.$ is the material derivative, and $\textbf{n}$ is the unit vector normal to the body.
 Solving this system on the GPU requires direct inversions of the $4 \times 4$ matrices.
-This process is elaborated on in \ref{system of euqations}.
-Once the $a$ coefficients have been found, the field value at the IP can be calculated with equation~\eqref{eq:Interpolation} and extrapolated across the surface using equation~\eqref{eq:Velocity Interpolation} for velocity or ~\eqref{eq:Pressure Interpolation} for pressure. 
-$\Delta l$ is the distance from GN to IP.
+This process is elaborated on in \ref{system of euqations}. 
+Once the $a$ coefficients have been found, the field value at the image point can be calculated with equation~\eqref{eq:Interpolation} and extrapolated across the surface using equation~\eqref{eq:Velocity Interpolation} for velocity or ~\eqref{eq:Pressure Interpolation} for pressure. 
+$\Delta l$ is the distance from ghost node to image point.
 \begin{align}
 \textbf{u}_{GN} &= 2\textbf{u}_{BI} - \textbf{u}_{IP} \label{eq:Velocity Interpolation} \\
 p_{GN} &= p_{ip} - \Delta l \left. \frac{\partial p}{\partial \textbf{n}}\right|_{BI} \;, \label{eq:Pressure Interpolation}
@@ -235,14 +261,16 @@ p_{GN} &= p_{ip} - \Delta l \left. \frac{\partial p}{\partial \textbf{n}}\right|
 \subsection{Interpolation to hybrid nodes}
 \label{Sec:Interpolation}
 
-Interpolating for the field value at the hybrid node is largely the same as interpolating for the ghost nodes' image point described previously.
-The BI is once again found by projecting the hybrid node along the surface normal.
-The IP is the same distance from the BI to the HN in the opposite direction of the HN as seen in Figure~\ref{fig:Interpolate}.
-The IP is only used to find the four interpolation nodes, one of which will always be the HN.
-The interpolation node coincident with the HN is moved to the BI and the appropriate boundary condition for velocity or pressure is applied.
+Interpolating for the field value at the hybrid node is largely the same as interpolating for the ghost nodes' image point described previously. 
+The body intercept is once again found by projecting the hybrid node along the surface normal. 
+The image point is not used in the same way as the ghost node image point is. 
+If a given body intercept is located at $(x_{BI},y_{BI})$ and its hybrid node is located at $(x_{BI}+\Delta x,y_{BI}+\Delta y)$ the corresponding image point is located at $(x_{BI}+2\Delta x,y_{BI}+2\Delta y)$ as shown in Figure~\ref{fig:Interpolate}. 
+In hybrid node case, an image points only purpose is locating the four interpolation nodes, one of which will always be the corresponding hybrid node. 
+The interpolation node coincident with the hybrid node is moved to the body intercept and the appropriate boundary condition for velocity or pressure is applied.
 Once equation~\eqref{eq:Interpolation} is solved, the hybrid node is interpolated for.
-Details on this process can be found in \ref{a: interpolation to hybrid nodes}.
-\begin{figure}[htb]
+Details on this process can be found in \ref{a: interpolation to hybrid nodes}. 
+\todo[inline]{deal with this}
+\begin{figure}[!htb]
 	\centering
 	\includestandalone[width=0.5\linewidth]{HN_interp_figure}
 	\caption{A detailed schematic of the hybrid node interpolation.}
@@ -252,7 +280,8 @@ Details on this process can be found in \ref{a: interpolation to hybrid nodes}.
 \subsection{Weighting}
 \label{Sec:Weighting}
 
-To dampen numerical oscillations, Luo et al.~\cite{Luo:2012gx} introduced a smooth transition between solution regimes at the body instead of a Dirac-delta-type function of traditional direct forcing.
+Instead of the Dirac-delta style transition at the body of traditional direct forcing methods, Luo et al.~\cite{Luo:2012gx} introduced a smooth transition between solution regimes.
+Its purpose is to dampen the numerical oscillations that results from the discontinuous switch. 
 The scalar $\alpha$ is introduced to the solutions for intermediate velocity and the pressure:
 \begin{equation}\label{eq:Weight}
 \theta = \left(1-\alpha \right)\theta_{Navier-Stokes} + \alpha \theta_{Interpolated} \;,
@@ -269,9 +298,9 @@ To solve for $\alpha$, it is assumed that each hybrid node has at most two neigh
 \alpha = \sqrt{\left(\frac{\Delta_1}{\Delta x}\right)^2 + \left(\frac{\Delta_2}{\Delta y}\right)^2} \;.
 \label{eq:Alpha}
 \end{equation}
-where $\Delta_1$ and $\Delta_2$ correlate to GN$_1$ and GN$_2$, respectively, and $\Delta x$ and $\Delta y$ are the grid spacing in the $x$ and $y$ directions, respectively.
-As described in Luo et al. and shown in Figure~\ref{fig:Weight}, $\Delta_1$ and $\Delta_2$ are the closest distances between the body and the $x$ and $y$ ghost nodes, respectively.
-If the hybrid node only has one neighbor, then $\Delta=0$ for the other direction.
+where $\Delta_1$ and $\Delta_2$ correlate to GN$_1$ and GN$_2$, respectively, and $\Delta x$ and $\Delta y$ are the grid spacing in the $x$ and $y$ directions, respectively. 
+As described in Luo et al. and shown in Figure~\ref{fig:Weight}, $\Delta_1$ and $\Delta_2$ are the closest distances between the body and the $x$ and $y$ ghost nodes, respectively. 
+If the hybrid node only has one neighbor, then $\Delta=0$ for the other direction. 
 \begin{figure}[htb]
 	\centering
 	\includestandalone[width=0.5\textwidth]{alpha_figure}
@@ -565,6 +594,7 @@ u_{i,j}^{n+1} = \hat{u} - \frac{p_{i+1,j}^{n+1} - p_{i,j}^{n+1}}{dx_i + dx_{i+1}
 \end{figure}
 
 \section{Fadlun Immersed Boundary Method}
+\label{sec:modified fadlun}
 When at an immersed body, the Navier--Stokes equation needs some additional treatment to correctly represent a body. 
 This section will detail the implementation of the Fadlun et al. approach to dealing with the immersed boundary.\todo{cite}
 \subsection{Intermediate Velocity}
@@ -788,6 +818,7 @@ In figures \ref{fig:ldc100} and \ref{fig:ldc1000}, (a) shows the $v$ velocity at
 \end{figure}
 
 \section{Impulsively started cylinder}
+\label{sec:cylinder}
 The impulsively started cylinder simulation tests the IBMs' ability to handle an immersed body.
 This test mimics a body being 'impulsively started', as if it was struck by a hammer.
 A large drag force on the cylinder will dissipate as the boundary layer develops.
