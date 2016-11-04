@@ -311,57 +311,61 @@ If the hybrid node only has one neighbor, then $\Delta=0$ for the other directio
 \chapter{Implementaiton and Discretization}\label{chapter:Implementation}
 
 This chapter will detail the discretization of the immersed boundary method and implementation on the GPU. 
+\todo[inline]{need more here, perhaps a summary of each section?}
 
 \section{Sparse Matricies}
-When using a dense matrix, every spot in the matrix has a stored value.
-In the matrix that represents the left hand side of the linear algebra terms, most of the values are zeros.
-It is inefficient to store the entirety a so called sparse matrix.
-There are many ways to store a sparse matrix, and the CUSP library can handle several types.
-The solver uses the COOrdinate matrix, COO for short.
-A COO matrix stores an entry as a combination of row, column and value.
-In CUSP, there are three separate arrays that from the COO data structure.
-When populating a COO matrix with a GPU, each node must have a predetermined location in the array.
-This is required because the left hand side matrix can't be stepped through in order as it can be on a CPU.
-Corners, sides and center nodes have three, four and five matrix entries, respectively.
-Each GPU thread calculates the total entries before it and starts placing its nodes appropriately.
-The nodes are counted from left to right, top to bottom.
-Once the number of entries has been found, the threads add their entries consecutively to the arrays.
+When using a dense matrix, every possible spot in the matrix has a physical location in memory. 
+The matrix that represents the coefficients for intermediate velocity and pressure are comprised of mostly zeros. 
+It is inefficient to store the entirety a so called sparse matrix. 
+cuIBM-FSI stores sparse matrices in the COO format. 
+A COO matrix stores each entry as three values, row, column and value. 
+CUSP represents each COO matrix as three separate arrays. 
+On a CPU as each node is stepped through its values can be added to the next location in the COO arrays. 
+If a GPU were to attempt this, a race condition would occur. 
+To prevent the race condition each node must have a predetermined location in the array. 
+Nodes at the corners, sides and center of the domain have three, four and five matrix entries, respectively. 
+This is determined by how many neighbors each node depends on. 
+Each GPU thread calculates the total entries before it and starts placing its nodes appropriately. 
+The nodes are counted from left to right, top to bottom. 
+In the kernel that generates the COO matrix, each node will be handled by a single thread. 
+The thread knows the first array location and the number of entries it should be adding, which it then does at it sees fit.
 
 \section{GPU implementation strategy}
 \label{GPU implementation strategy}
-
-The solver is developed for full GPU operation to improve performance relative to CPU-based algorithms.
-To this end, several overarching strategies have been implemented.
+cuIBM-FSI is developed for full GPU operation to improve performance relative to CPU-based algorithms. 
+To this end, several overarching strategies have been implemented. 
 First, all calculations are performed on the GPU, and all data is stored on the GPU.
-Typically, efforts are taken to avoid thread divergence when writing code for a GPU.
-We found it favorable to write kernels with occasionally poor thread-parallel performance, i.e., kernels with significant divergence, rather than copying data to the host to do calculations to reduce divergence.
-In our experiences, transferring data back and forth took significantly more time than would be saved by running some operations on a CPU.
-This was particularly relevant when moving from a stationary body to a moving body.
+Typically, efforts are taken to avoid thread divergence when writing code for a GPU. 
+We found it favorable to write kernels with occasionally poor thread-parallel performance, i.e., kernels with significant divergence, rather than copying data to the host to do calculations to reduce divergence. 
+Increasing the parallel performance of kernels has little effect on the overall solver performance because solving the Poisson equation typically takes more than \SI{90}{\percent} of the total computational time. 
+In our experiences, transferring data back and forth took significantly more time than would be saved by running some operations on a CPU. 
+This is particularly relevant when moving from a stationary body to a moving body.
 When simulating a stationary body, several calculations only need to be performed once, such as the left side matrices, node identification and preconditioners.
-When simulating a moving body, these values need to be recalculated every time step, causing a total computational cost for each nearly as high as the Poisson equation solve (typically the most expensive step).
-This relates to the second strategy: evaluate algorithm performance compared to the Poisson equation.
-Increasing the parallel performance of kernels has little effect on the overall solver performance because solving the Poisson equation typically takes more than \SI{90}{\percent} of the total computational time.
+When simulating a moving body, these values need to be recalculated every time step, causing a total computational cost for each nearly as high as the Poisson equation solve (typically the most expensive step). 
+This relates to the second strategy: evaluate algorithm performance compared to the Poisson equation. 
 
 The third strategy comes from Layton et al.~\cite{layton2011cuibm}.
 When using the Cusp library to perform the multigrid method, creating the preconditioner can take as much time as solving the Poisson equation.
 In a moving-body simulation, the preconditioner is normally recalculated each time step, but Layton et al.~\cite{layton2011cuibm} found it possible to skip some time steps without loss of fidelity.
-Here, we recalculate the preconditioner only if solution of the previous time step required more than 100 iterations.
+Here, we recalculate the preconditioner only if solution of the previous time step required more than 100 iterations. 
+The external method does not need the preconditioner to be remade, even when its moving, because each node always depends on the same things regardless of the position of the body. 
+
 
 \section{Grid Staggering}
 \label{Grid Staggering}
 
 A collocated grid stores all variable information at the center of each cell.
-When discretized on a collocated grid, Navier--Stokes will yield an odd-even decoupling of pressure an velocity resulting in a checkerboard pattern. 
+When discretized on a collocated grid, Navier--Stokes will yield an odd-even decoupling of pressure an velocity resulting in a checkerboard pattern unless special steps are taken to prevent it. 
 \todo[inline]{findsource for this info}
 Using a staggered grid is a relatively straightforward way to avoid odd-even decoupling.
 A staggered grid stores scalar values(pressure, temperature, density etc.) at the cell center and velocities at the cell face. 
-Staggered grids also do not require a pressure boundary condition.
-\todo[inline]{is this true?}
-Figure~\ref{fig:stagger} shows how the grid is staggered.
+Staggered grids also have the advantage of not requiring a pressure boundary condition.
+cuIBM-FSI is staggered in the positive x and y directions. 
+That is, if the cell center is cell denoted as i as shown in Figure~\ref{fig:stagger}, the top and right faces are also denoted as i and the bottom and left faces are i-nx and i-1. 
 It is worth noting that Luo et al.\cite{Luo:2012gx} uses a collocated grid.
-Due to the sensitivity of immersed boundary methods near the body, this will cause some difference.
-There is no theoretical reason, however, why the numerical suppression method will not work on a staggered grid.
-\begin{figure}[htb]
+Due to the sensitivity of immersed boundary methods near the body, this may cause some difference.
+There is no theoretical reason why the numerical suppression method should not work on a staggered grid.
+\begin{figure}[!htb]
 	\centering
 	\includestandalone[width=0.5\textwidth]{grid_stagger}
 	\caption{Grid staggering: The velocities are staggered in the positive x and y directions.}
@@ -370,21 +374,21 @@ There is no theoretical reason, however, why the numerical suppression method wi
 
 \section{Node Identification}
 Nodes are identified using a ray tracing algorithm described in the book Computational Geometry in C by Joesph O'Rourke\cite{o1998computational}.
-The implementation is based of the CPU implementation from the original cuIBM code.
+The implementation is based of the CPU implementation from the original cuIBM. \todo{get citation for cuIBM}
 One thread is generated for each node, be it u, v or pressure and performs the following actions to find rays in the x direction.
 First the Lagrangian body nodes are looped through to make segments with their nearest neighbors.
-If to top of this segment is above the node and the bottom of the segment is below the node then the x location of the body at the height of the node is found as seen in figure \ref{fig:node id 1}.
-The node is then tested for proximity to the body in the x direction.
-To determine what the node type five x-coordinates are used; $x_{i-1}$, $x_{i}$, $x_{i+1}$, $x_{BI}$ and $x_{body center}$.
-Using Figure \ref{fig:node id 1} for example, the BI will text as being greater than the body center, greater than $x_{i-1}$ and less than $x_{i}$ which means $u_{i,j}$ is a hybrid node and $u_{i-1,j}$ is a ghost node.
+If to top of this segment is above the node and the bottom of the segment is below the node then the x location of the body at the height of the node is found(open circle in Figure~\ref{fig:node id 1}).
+The node is then tested for proximity to the body in the x direction. 
+To determine what the node is, five x-coordinates are used; $x_{i-1}$, $x_{i}$, $x_{i+1}$, $x_{BI}$ and $x_{body center}$. 
+Using Figure \ref{fig:node id 1} for example, the BI will text as being greater than the body center, greater than $x_{i-1}$ and less than $x_{i}$ which makes $u_{i,j}$ a hybrid node. 
 
 It is possible for a hybrid or ghost node to be unable to find the body when searching in the x direction, i.e. if the node is above the highest body node.
 After the algorithm looks for intersections in the x direction it searches in the y direction.
-In the case where a node is able to find the body in both the x and y directions, the x direction is always chosen.
-The v velocity and pressure nodes are found in the same way as described above.
+In the case where a node is able to find the body in both the x and y directions, the x direction is always chosen. 
+The v velocity and pressure nodes are found in the same way as described above, but use different coordinates.
 
 After all the points have been tagged, the solid nodes are set to an arbitrary value so they can be easily found later.
-This step is not critical for Navier--Stokes but is needed for the force calculation and can be convenient when visualizing the solution.
+This step is not critical for Navier--Stokes but is needed for the force calculation, which disregards everything inside the body, and can be convenient when visualizing the solution.
 \begin{figure}
 	\centering
 	\includestandalone[width=0.5\textwidth]{node_id_1}
@@ -392,27 +396,25 @@ This step is not critical for Navier--Stokes but is needed for the force calcula
 	\label{fig:node id 1}
 \end{figure}
 
-\todo[inline]{find krishnan paper to reference}
-
 \section{Force Calculation}
 \label{Force Calculation}
 
 The drag and lift on the body are calculated using the control volume approach detailed in Lai and Peskin\cite{lai2000immersed}.
-The implementation of this approach is largely the same as the original cuIBM.
-From Lai and Peskin the drag force can be calculated using Equation \ref{eq:force calculation}.
+The implementation of this approach is largely the same as the original cuIBM. 
+Lai and Peskin give Equation~\eqref{eq:force calculation} to calculate the drag force. 
 \begin{equation}\label{eq:force calculation}
 F_D=-\int_{\partial \Omega_0} \rho u_i\textbf{u}\cdot \textbf{n}ds- \int_{\partial \Omega_0}pn_ids+\int_{\partial \Omega_0}\mu \left(\frac{\partial u_i}{\partial x_j}+\frac{\partial u_j}{\partial x_i}\right)n_jds-\frac{\partial}{\partial t}\int_{\Omega_0}\rho u_i d\textbf{x}
 \end{equation}
-$\Omega_0$ is any square domain around the body.
-Once discretized, simplified, non-dimensionalized the terms can be rearranged into 3 groups, FxX, FxY and FxU.
-The first term represents the forces in the x direction from the left and right of the control volume and is formed from the second and third integral.
+$\Omega_0$ is any square sub-domain place around the body. 
+Once discretized, simplified, non-dimensionalized the terms can be rearranged into 3 groups, FxX, FxY and FxU. 
+The first term represents the forces in the x direction from the left and right of the control volume and is formed from the second and third integral in \eqref{eq:force calculation}. 
 FxY is the forces in the x direction from the top and bottom of the control volume.
-It comes from the first and third integral.
-The fourth integral becomes FxU, the x force from the unsteady term and includes everything inside of the control volume.
+It comes from the first and third integral. 
+The fourth integral becomes FxU, the x force from the unsteady term and includes everything inside of the control volume. 
 These terms are partialy discretized in equations \eqref{eq:force calculation 2}, \eqref{eq:force calculation 3} and \eqref{eq:force calculation 4}. 
 \begin{align}
-FxX &=\sum_{\Omega_y}-\left((p_e-p_w)+(u_e^2-u_w^2)-\nu\left(\left.\frac{du}{dx}\right|_e-\left.\frac{dv}{dx}\right|_w\right)\right)dy\label{eq:force calculation 2}\\
-FxY &=\sum_{\Omega_x}-\left(0.5(u_nv_n-u_sv_s)-0.25\nu \left(\left.\frac{du}{dy}\right|_n+\left.\frac{dv}{dx}\right|_n-\left.\frac{du}{dy}\right|_s-\left.\frac{dv}{dx}\right|_s\right)\right)\label{eq:force calculation 3}\\
+FxX &=-\sum_{\Omega_y}\left((p_e-p_w)+(u_e^2-u_w^2)-\nu\left(\left.\frac{du}{dx}\right|_e-\left.\frac{dv}{dx}\right|_w\right)\right)dy\label{eq:force calculation 2}\\
+FxY &=-\sum_{\Omega_x}\left(0.5(u_nv_n-u_sv_s)-0.25\nu \left(\left.\frac{du}{dy}\right|_n+\left.\frac{dv}{dx}\right|_n-\left.\frac{du}{dy}\right|_s-\left.\frac{dv}{dx}\right|_s\right)\right)\label{eq:force calculation 3}\\
 FxU &=\frac{u_i^{n+1}-u_i^{n}}{dt}0.5dydx\;\label{eq:force calculation 4}
 \end{align}
 The subscripts n,e,s,w represent the north, east, south and west faces of the sqaure domain $\Omega_0$.
@@ -840,7 +842,7 @@ For a Reynolds number of 40 a uniform grid with spacing 0.025 is used from (-0.6
 \todo{find cfl number}
 A time step of 0.005 is used with a maximum CFL of approximately.
 Figure \ref{fig:cy40}a and \ref{fig:cy40}b compares the computed drag force of the modified Fadlun et al. and external Luo et al. methods respectively to that of Koumoutsakos and Leonard.
-\begin{figure}[h]
+\begin{figure}[!htb]
 	\centering
 	\begin{subfigure}{0.4\textwidth}
 		\includegraphics[width=\linewidth]{cy40fadlun}
