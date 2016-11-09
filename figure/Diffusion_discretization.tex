@@ -28,9 +28,10 @@
 \draw[lightgray, thin] (0,-5) -- (0,-5.25);
 \draw[lightgray, thin] (3,-5) -- (3,-5.25);
 
-\draw[lightgray, thin] (-2,-3) -- (-2.25,-3);
-\draw[lightgray, thin] (-2,0) -- (-2.25,0);
-\draw[lightgray, thin] (-2,2) -- (-2.25,2);
+\draw[lightgray, thin] (-2,3) -- (-2.25,3);
+\draw[lightgray, thin] (-2,1) -- (-2.25,1);
+\draw[lightgray, thin] (-2,-1) -- (-2.25,-1);
+\draw[lightgray, thin] (-2,-5) -- (-2.25,-5);
 %nodes
 \filldraw [black] (0,0) circle (2pt) node[anchor=west] {$u_{i,j}$};
 \filldraw [black] (0,2) circle (2pt) node[anchor=west] {$u_{i,j+1}$};
@@ -40,8 +41,9 @@
 %dx dy anchors
 \node[black, thin, anchor=north](dxi) at (-1,-5){$dx_i$};
 \node[black, thin, anchor=north](dxip) at (1.5,-5){$dx_{i+1}$};
-\node[black, thin, anchor=east](dyjm) at (-2,-1.5){$dy_{j-1}$};
-\node[black, thin, anchor=east](dyj) at (-2,1){$dy_j$};
+\node[black, thin, anchor=east](dyjm) at (-2,2){$dy_{j+1}$};
+\node[black, thin, anchor=east](dyj) at (-2,0){$dy_j$};
+\node[black, thin, anchor=east](dyj) at (-2,-3){$dy_{j-1}$};
 
 \end{tikzpicture}
 \end{document}
