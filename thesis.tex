@@ -1,4 +1,9 @@
-
+\newenvironment{spmatrix}[1]
+{\def\mysubscript{#1}\mathop\bgroup\begin{pmatrix}}
+	{\end{pmatrix}\egroup_{\textstyle\mathstrut\mysubscript}}
+\newcommand*{\putunder}[2]{%
+	{\mathop{#1}_{\textstyle #2}}%
+}
 \documentclass[onehalf,11pt]{beavtex}
 \title{GPU-Based Fluid Structure Interaction using Immersed Boundary Methods}
 \author{Christopher Minar}
@@ -26,6 +31,7 @@ We also thank the Barba Group for developing, maintaining, and distributing thei
 \usepackage{tikz} %used for tikz graphics
 \usepackage{standalone}  %used for tikz graphics
 \usetikzlibrary{shapes}  %used for tikz graphics
+\usepackage{amsmath} %used for matrix
 \usepackage{graphicx} %needed for subfigure
 \usepackage{float,caption,subcaption} %figure stuff
 \graphicspath{{./figure/}} %figure path
@@ -679,69 +685,117 @@ Secondly, Luo et al. uses Crank-Nicholson to discretize both the advection and d
 
 \subsection{External Interpolation}
 \label{sec:ID external}
-\todo{ you are here}
 The external interpolation method tries to resolve the time step in a non-iterative manner by calculating the interpolations, extrapolations and weighting outside of the linear algebra. 
-The following sequence is setup such that a value is interpolated or extrapolated just before it is needed for the subsequent step.
-For example, the equation for intermediate velocity,\eqref{eq:Intermediate Velocity}, depends on the velocity field so $u$ and $v$ are interpolated for at the hybrid nodes and extrapolated for at the ghost nodes before the right hand side matrix is calculated.
+Before a value is used by fractional step, it is calculated at the hybrid and ghost nodes. 
+For example, the equation for intermediate velocity,\eqref{eq:Intermediate Velocity}, depends on the velocity field so $u$ and $v$ are interpolated for at the hybrid nodes and extrapolated for at the ghost nodes before the right hand side matrix is calculated. 
+The following sequence is setup such that a value is interpolated or extrapolated just before it is needed for the subsequent step. 
+
 
 \begin{enumerate}
-	\item Identify all nodes as hybrid, ghost, fluid or solid.
-	\item Extrapolate u and v velocity values to ghost nodes.
-	\item Interpolate for u and v velocities at hybrid nodes.
-	\item Calculate right hand side for the intermediate velocity solution.
-	\item Solve for intermediate velocity.
-	\item Weight the two intermediate velocity solutions.
-	\item Extrapolate intermediate velocities to ghost nodes.
-	\item Calculate right hand side for the Poisson equation.
-	\item Solve the Poisson equation.
-	\item Interpolate for pressure at hybrid nodes.
-	\item Weight the two pressure solutions.
-	\item Extrapolate pressure to ghost nodes.
-	\item Update velocity.
-	\item Advance time.
+	\item Identify all nodes as hybrid, ghost, fluid or solid. 
+	\item Extrapolate u and v velocity values to ghost nodes. 
+	\item Interpolate for u and v velocities at hybrid nodes. 
+	\item Calculate right hand side for the intermediate velocity solution. 
+	\item Solve for intermediate velocity. 
+	\item Weight the two intermediate velocity solutions. 
+	\item Extrapolate intermediate velocities to ghost nodes. 
+	\item Calculate right hand side for the Poisson equation. 
+	\item Solve the Poisson equation. 
+	\item Interpolate for pressure at hybrid nodes. 
+	\item Weight the two pressure solutions. 
+	\item Extrapolate pressure to ghost nodes. 
+	\item Update velocity. 
+	\item Advance time. 
 \end{enumerate}
 
 \subsection{Embedded Interpolation}
 \label{sec:ID embedded}
-In the embedded interpolation version, the Navier--Stokes and interpolated solutions for field values are calculated and weighted inside each linear algebra step.
-In the intermediate velocity substep, the right hand side terms are first calculated as if no body was present.
-Then, everything that can be calculated based off of the geometry is done.
-This includes the weighting values and most of the interpolation.
-For example the equations used to interpolated for velocity at the ghost node, \eqref{eq:Interpolation} and \eqref{eq:Velocity Interpolation}, are expanded and manipulated to become equation \eqref{eq:ID reorganized interpolation}.
+In the embedded interpolation version, the Navier--Stokes and interpolated solutions for field values are calculated and weighted inside each linear algebra solver. 
+In the intermediate velocity substep, the right hand side terms are first calculated as if no body was present. 
+The weighting coefficients and some of the interpolation can be calculated prior to the linear algebra because they are only dependent on the geometry, not the velocity or pressure. 
+The equations for bi-linear interpolation, \eqref{eq:Interpolation}, and interpolating to the ghost node, \eqref{eq:Velocity Interpolation} or \eqref{eq:Pressure Interpolation} are combined and rearranged split into field value terms and everything else. 
+A similar operation happens for the hybrid nodes. 
+To illustrate the process of separating these variables, $u$ is plugged in for $\phi$ in Equation~\eqref{eq:ID reorganized interpolation}. 
+\begin{equation}
+u(x,y) = a_0 + a_1x +a_2y+a_3xy
+\end{equation}
+Each bi-linear interpolation requires four data points to solve. 
+The method for placing these is discussed in chapter~\ref{chapter:Numerical Methods}. 
+They will be labeled roughly according to their cardinal direction to the interpolation location. 
+The resulting system of equations is laid out below in equation \eqref{eq:interp matrix1} and matrix form~\eqref{eq:interp matrix2}:
+\begin{equation}
+Aa=u \label{eq:interp matrix1}
+\end{equation}
+\begin{gather}
+\putunder{
+\begin{bmatrix}
+		  1&x_{sw}&y_{sw}&x_{sw}y_{sw}\\
+		  1&x_{se}&y_{se}&x_{se}y_{se}\\
+		  1&x_{nw}&y_{nw}&x_{nw}y_{nw}\\
+		  1&x_{ne}&y_{ne}&x_{ne}y_{ne}
+\end{bmatrix}
+}{A}
+\putunder{
+\begin{bmatrix}
+	a_0\\
+	a_1\\
+	a_2\\
+	a_3
+\end{bmatrix}
+}{a\vphantom{A}}
+=
+\putunder{
+\begin{bmatrix}
+	u_{sw}\\
+	u_{se}\\
+	u_{nw}\\
+	u_{ne}
+\end{bmatrix}
+}{u\vphantom{A}}
+\label{eq:interp matrix2}
+\end{gather}
+Equation~\eqref{eq:Ainverse} gives the exact inverse of matrix $A$. 
+Matrix $B$ is based on the values of $A$. 
+The inverse is used to solve for the $a$ coefficients, \eqref{eq:acoef}.
+\begin{align}
+A^{-1} = \frac{B}{det(a)}
+\label{eq:Ainverse}\\
+a=A^{-1}u\;\label{eq:acoef}
+\end{align}
+The external method stops here because all the $u$ values are considered known. 
+The embedded method moves rearranges and combines with the ghost node interpolation to become Equation~\eqref{eq:ID reorganized interpolation}. 
+The array $C$ is the velocity coefficients resulting from \eqref{eq:acoef} being manipulated. 
+Subscripts indicate the row and column of the matrix. 
+The calculation of $C$ is the portion of the bi-linear interpolation that is performed before the linear algebra step. 
+
 \begin{equation}
 \textbf{u}_{GN} = 2\textbf{u}_{BI} + C_{NW}\textbf{u}_{NW} + C_{NE}\textbf{u}_{NE} + C_{SW}\textbf{u}_{SW} + C_{SE}\textbf{u}_{SE}\label{eq:ID reorganized interpolation}
 \end{equation}
-The $C$ coefficients are based off of the interpolation's location.
-\todo{elaborate on what makes C somewhere}
-Before the left hand side matrix can be calculated, the number of values in the sparse matrix must be found first because the hybrid nodes now have a larger stencil than normal. 
-Figure \ref{fig:ID combined stencil}a shows how the ghost node stencils can be modified.
-Ghost node 1, in the upper left, only uses four nodes indicated by the open circles. 
-In a situation where a stencil is smaller than five nodes, an additional node that isn't being used is added with a coefficient of zero.
-This is done because cusp COO matricies are initialized with a specified number of non-zero nodes.
-When initialized, all the values are set at (0,0,0) where the zeros represent the row, column and value of a given non-zero entry.
-If the cusp multi-grid solver sees multiple (0,0,0) entries it will fail to converge upon a solution.
-It is easier to add a zero value than to restructure the matrix to not have a value.
-Using node one as an example, say node 1 is the 1000th spot in the array and the grid spans nx cells in the x direction.
-The nodes that represent the stencil will be (1000,1000+nx,$u_{north}$), (1000,1000+nx+1,$u_{north east}$), (1000,1000,$u_{center}$) and (1000,1000+1,$u_east$).
-The value, (1000,1000-1,0) would be added to the sparse matrix to ensure that there are five nodes for this value.
-Ghost node two, which depends on the nodes marked with open squares, does not need any special resizing because it uses five nodes.
+\begin{gather}
+	\begin{bmatrix}
+		C_{sw}\\
+		C_{se}\\
+		C_{nw}\\
+		C_{ne}
+	\end{bmatrix}
+=
+	\begin{bmatrix}
+		b_{11}&+&b_{21}x_{IP}&+&b_{31}y_{IP}&+&b_{41}x_{IP}y_{IP}\\
+		b_{12}&+&b_{22}x_{IP}&+&b_{32}y_{IP}&+&b_{42}x_{IP}y_{IP}\\
+		b_{13}&+&b_{23}x_{IP}&+&b_{33}y_{IP}&+&b_{43}x_{IP}y_{IP}\\
+		b_{14}&+&b_{24}x_{IP}&+&b_{34}y_{IP}&+&b_{44}x_{IP}y_{IP}
+	\end{bmatrix}
+	/det(A)
+\label{eq:ucoef 1}
+\end{gather}
 
-The stencil for hybrid nodes, as seen in Figure \ref{fig:ID combined stencil}, has two overlapping stencils.
-The interpolation stencil is shown by the shaded region and depends on the nodes marked with circles.
-The Navier--Stokes stencil is marked with the solid black lines and open squares.
-Combining the two into a hybrid stencil results in six entries to the sparse matrix.
-Five of the six nodes are put in place as normal and the extra node is added at the end. 
-The algorithm that counts the extra nodes sweeps through the matrix, right to left, top to bottom, counting hybrid nodes.
-Once the total number of entires to the sparse matrix has been calculated, the left hand side matrix is calculated.
-By adding all of the counted hybrid nodes to another matrix, that is otherwise full of zeros, a total number of extra nodes required for the sparse matrix is found and a map is created for adding extra nodes.
-For instance, if there are 200 hybrid nodes, there will be 5, 4 and 3 entries for the center, side and corner nodes respectively plus 200 additional entires at the end.
-Considering hybrid node 100, 5 of the entries will be placed in the allocated positions in the sparse matrix and the extra entry will be placed 100 positions from the end.
-
-\begin{figure}[htb]
+Before the left hand side matrix can be calculated, the number of values in the sparse matrix must be found because the hybrid nodes now have a larger stencil than normal. 
+Figure \ref{fig:ID combined stencil}a shows how the ghost node stencils can be modified. 
+\begin{figure}[!htb]
 	\centering
 	\begin{subfigure}{0.4\textwidth}
-			\includestandalone[width=\linewidth]{combined_stencil}
-			\caption{Stencil modification for ghost nodes}		
+		\includestandalone[width=\linewidth]{combined_stencil}
+		\caption{Stencil modification for ghost nodes}		
 	\end{subfigure}
 	~
 	\begin{subfigure}{0.4\textwidth}
@@ -751,6 +805,27 @@ Considering hybrid node 100, 5 of the entries will be placed in the allocated po
 	\caption{The stencil of the left hand side matrices change when doing the interpolations inside of the linear algebra step.}
 	\label{fig:ID combined stencil}
 \end{figure}
+Ghost node 1, in the upper left, only uses four nodes indicated by the open circles. 
+In a situation where a stencil is smaller than five nodes, an additional node that isn't being used is added with a coefficient of zero.
+This is done because cusp COO matricies are initialized with a specified number of non-zero nodes.
+When initialized, all the values are set at (0,0,0) where the zeros represent the row, column and value of a given non-zero entry.
+If the cusp multi-grid solver sees multiple (0,0,0) entries it will fail to converge upon a solution.
+It is easier to add a zero value than to restructure the matrix to not have a value.
+Say node 1 is the 1000th spot in the array and the grid spans nx cells in the x direction.
+The nodes that represent the stencil will be (1000,1000+nx,$u_{north}$), (1000,1000+nx+1,$u_{north east}$), (1000,1000,$u_{center}$) and (1000,1000+1,$u_{east}$). 
+The value, (1000,1000-1,0) would be added to the sparse matrix to ensure that there are five total nodes that node 1000 is dependent on. 
+Ghost node two, which depends on the nodes marked with open squares, does not need any special resizing because it uses five nodes. 
+
+The stencil for hybrid nodes, seen in Figure \ref{fig:ID combined stencil}b, has two overlapping stencils. 
+The interpolation stencil is shown by the shaded region and depends on the nodes marked with circles. 
+The Navier--Stokes stencil is marked with the solid black lines and open squares.
+Combining the two into a hybrid stencil results in six entries to the sparse matrix.
+As the left hand side matrix is being built the algorithm will place five of the six nodes in their allocated memory locations. 
+To place the last node, each hybrid node is counted and labeled from left to right, top to bottom. 
+Extra memory is allocated to the end of the sparse matrix arrays, one additional spot for each counted hybrid node. 
+The sixth entry to sparse matrix is placed at the end of the normal amount of entries to the sparse matrix plus the count of the hybrid node. 
+For example, if before the immersed boundary is considered, the left hand side matrix is expected to have twenty thousand entries and has 200 hybrid nodes. 
+Hybrid node fifty will have its six value place at location 20050 in the sparse matrix arrays. 
 
 After the LHS matrix is made, it is sorted by row and column using a built in CUSP function and then the preconditioners are rebuilt.
 The CUSP solvers are optimized to operate on a sorted matrix and sometimes crashed due to the out of order values at the end of the arrays.
@@ -760,7 +835,6 @@ This makes it possible to multiply the original value by the Navier--Stokes weig
 Finally, $\hat{\textbf{u}}$ is calculated using a linear algebra solver.
 
 The implementation of the embedded Poisson equation is the same as outlined above.
-
 
 \chapter{Validation and Verification}\label{chapter:Validation}
 The solvers have been compared against five well known simulations and experiments.
