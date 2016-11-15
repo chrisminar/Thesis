@@ -14,7 +14,6 @@
 *.loaf
 *.loap
 *.loat
-*.pdf
 
 ## Intermediate documents:
 *.dvi
@@ -22,8 +21,33 @@
 # these rules might exclude image files for figures etc.
 # *.ps
 # *.eps
-# *.pdf
-ParCFD2016-GPU-IBM-paper.pdf
+
+## tikz figures in pdf form
+advection_discretization.pdf
+advection_non-uniform.pdf
+advection_problem_figure.pdf
+alpha_figure.pdf
+basic_extrapolation.pdf
+basic_interp_figure.pdf
+bc_discretization.pdf
+bi-linear_interpolation.pdf
+combined_stencil.pdf
+combined_stencil_2.pdf
+CylinderDomain.pdf
+Diffusion_discretization.pdf
+GN_interp_figure.pdf
+grid_reduction.pdf
+grid_reduction2.pdf
+grid_stagger.pdf
+HN_interp_figure.pdf
+LidDrivenCavity.pdf
+linear_interpolation.pdf
+node_id.pdf
+node_id_1.pdf
+node_transition_figure.pdf
+nodes_figure.pdf
+poisson_discretization.pdf
+thesis.pdf
 
 ## Bibliography auxiliary files (bibtex/biblatex/biber):
 *.bbl
