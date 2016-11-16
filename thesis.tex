@@ -127,19 +127,17 @@ Velocity is updated in the last sub step with:
 To facilitate the discussion of IBMs the nomenclature with regards to point identification will be explained here. 
 The nomenclature is mostly adopted from the work of Luo et al.\cite{Luo:2012gx}
 There are four types of nodes. 
-Not all of them are used in each method, and the methods treat nodes differently. 
-Nodes immediately outside the body are hybrid nodes. 
-In all three methods, the hybrid nodes are interpolated for using the body and second nearest node. 
-Nodes immediately inside the body are ghost nodes. 
-The Fadlun(and modified Fadlun) method doesn't use these but the external and embedded methods both try to set these values in a way that enforces the body, more on this in section~\ref{Sec:Field Extrapolation}. \todo[inline]{cite mittal?}
-Everything outside of the body that ins't a hybrid node is a fluid node. 
-Fluid nodes are solved by the unmodified Navier--Stokes equations. 
+Not all node types are used in each method, and the methods treat nodes differently. 
+Nodes immediately outside the body are called hybrid nodes. 
+In all three methods, the hybrid nodes are interpolated for using the body and fluid nodes near the body. 
+Everything outside of the body that isn't a hybrid node is a fluid node. 
+Fluid nodes are solved with the Navier--Stokes equations. 
+Nodes immediately inside the body are ghost nodes and work largely the same as Mittal et al.\cite{Mittal:2005ii}. 
+The Fadlun(and modified Fadlun) method doesn't use these but the external and embedded methods both try to set these values in a way that enforces the body's boundary conditions, more on this in section~\ref{Sec:Field Extrapolation}. 
 Everything else (all nodes inside the body that are not ghost nodes) are solid nodes. 
-The treatment of solid nodes doesn't effect the solution. 
-It does effect the computational time. 
-The Poisson equation tends to solve the fastest when a standard five point stencil is used. 
-When the solid nodes use a five point stencil an arbitrary flow field will develop inside the body. \todo{this section is sloppy and could use some tinkering}
-Figure~\ref{fig:node id} demonstrates. 
+The treatment of solid nodes doesn't effect the solution but it does affect the computational time and force calculation.
+If solid nodes are solved for an arbitrary flow field will develop inside the body. 
+An example body and grid with labeled nodes is shown in Figure~\ref{fig:node id}. 
 
 \begin{figure}[!htb]
 	\centering
@@ -161,7 +159,6 @@ Instead, the velocity at the hybrid node is approximated by linearly interpolati
 At this point a clever observer might notice a complication induced by the fractional step method. 
 Which is correct, to enforce no slip to the intermediate velocity in the first sub step, or to velocity during the third sub step? 
 Fadlun found that when no-slip is applied during the intermediate time step, the error introduced in the velocity correction step was always negligibly small compared to the velocity. 
-\todo[inline]{when is this approximation not viable?}
 $\textbf{RHS}$ and $1-\frac{\Delta t}{2}L$ from Equation \eqref{eq:Intermediate Velocity} can be setup as if they was no body, then modified at the hybrid nodes to enforce no slip with the linear interpolation. 
 The discretization of this is shown in appendix \ref{Fadlun Linear Interpolation}. 
 The Poisson Equation \ref{eq:Poisson} and projection step \ref{eq:Projection} are left unmodified in the work of Fadlun et al. 
@@ -274,8 +271,7 @@ If a given body intercept is located at $(x_{BI},y_{BI})$ and its hybrid node is
 In hybrid node case, an image points only purpose is locating the four interpolation nodes, one of which will always be the corresponding hybrid node. 
 The interpolation node coincident with the hybrid node is moved to the body intercept and the appropriate boundary condition for velocity or pressure is applied.
 Once equation~\eqref{eq:Interpolation} is solved, the hybrid node is interpolated for.
-Details on this process can be found in \ref{a: interpolation to hybrid nodes}. 
-\todo[inline]{deal with this}
+
 \begin{figure}[!htb]
 	\centering
 	\includestandalone[width=0.5\linewidth]{HN_interp_figure}
@@ -338,7 +334,6 @@ The thread knows the first array location and the number of entries it should be
 
 \section{GPU implementation strategy}
 \label{GPU implementation strategy}
-\todo[inline]{make a picture to demonstrate why divergence is acceptable}
 cuIBM-FSI is developed for full GPU operation to improve performance relative to CPU-based algorithms. 
 To this end, several overarching strategies have been implemented. 
 First, all calculations are performed on the GPU, and all data is stored on the GPU.
@@ -346,7 +341,27 @@ Typically, efforts are taken to avoid thread divergence when writing code for a 
 We found it favorable to write kernels with occasionally poor thread-parallel performance, i.e., kernels with significant divergence, rather than copying data to the host to do calculations to reduce divergence. 
 Increasing the parallel performance of kernels has little effect on the overall solver performance because solving the Poisson equation typically takes more than \SI{90}{\percent} of the total computational time. 
 In our experiences, transferring data back and forth took significantly more time than would be saved by running some operations on a CPU. 
-This is particularly relevant when moving from a stationary body to a moving body.
+
+In addition to non-Poisson kernels being a low overall portion of the run time, the effect of the divergence turns out to be small. 
+For most kernels, the divergence occurs in cells that are near the body because handling hybrid, ghost, fluid and solid nodes requires if statements. 
+Divergence happens due to the hardware operating inside of a GPU. 
+A GPU is made up of some number of logic units, each of which controls thirty two arithmetic units. 
+Ideally, the logic unit is able to send the exact same command to each arithmetic unit. 
+Divergence occurs when the logic unit has to send a command to some of arithmetic units while making the other ones wait. 
+This happens, for instance, during an if statement. 
+Figure~\ref{fig:divergence} shows an example body with hybrid nodes shaded light gray and ghost nodes shaded dark gray. 
+Cells edges are represented by the dashed lines and the warps are represented by the solid lines. 
+For simplification, each row is depicted as being part of a warp, with the remainder of the warps being made of cells to the right and left of the shown domain. 
+This is the worst situation for divergence, having the most possible differences in as few warps as possible. 
+The fluid and solid nodes are all treated the same and each only take one pass with the logic unit. 
+Assuming the worst case scenario that each ghost and hybrid node requires its own pass, the total number of passes for each row is \numlist{1;4;6;4;4;4;4;6;4;1}. 
+Each additional pass that each warp has to make can be considered the same as adding thirty two more nodes to the simulation. 
+In the example so far, the 320 cells of the ten warps partially shown would take approximately 1200 cells worth of computational time. 
+A times four slow down is pretty bad but the number of cells near the body is very small compared to the overall simulation. 
+In the first test discussed in chapter \ref{chapter:Validation}, the cells near the body account for approximately 10\% of the overall cell count.
+
+
+Data transfer time is particularly relevant when moving from a stationary body to a moving body.
 When simulating a stationary body, several calculations only need to be performed once, such as the left side matrices, node identification and preconditioners.
 When simulating a moving body, these values need to be recalculated every time step, causing a total computational cost for each nearly as high as the Poisson equation solve (typically the most expensive step). 
 This relates to the second strategy: evaluate algorithm performance compared to the Poisson equation. 
@@ -381,7 +396,7 @@ There is no theoretical reason why the numerical suppression method should not w
 
 \section{Node Identification}
 Nodes are identified using a ray tracing algorithm described in the book Computational Geometry in C by Joesph O'Rourke\cite{o1998computational}.
-The implementation is based of the CPU implementation from the original cuIBM. \todo{get citation for cuIBM}
+The implementation is based of the CPU implementation from the original cuIBM\cite{krishnan2012validation}. 
 One thread is generated for each node, be it u, v or pressure and performs the following actions to find rays in the x direction.
 First the Lagrangian body nodes are looped through to make segments with their nearest neighbors.
 If to top of this segment is above the node and the bottom of the segment is below the node then the x location of the body at the height of the node is found(open circle in Figure~\ref{fig:node id 1}).
@@ -936,9 +951,8 @@ Figure~\ref{fig:iscylinder} shows the domain of the Reynolds number 40 simulatio
 \end{figure}
 
 All lengths are normalized against the body diameter, i.e the circle's diameter is one.
-For a Reynolds number of 40 a uniform grid with spacing 0.025 is used from (-0.6,-0.6) to (0.6,0.6) for a total of 186x186 cells are used.
-\todo{find cfl number}
-A time step of 0.005 is used with a maximum CFL of approximately.
+For a Reynolds number of 40 a uniform grid with spacing 0.025 is used from (-0.6,-0.6) to (0.6,0.6) for a total of 186x186(34596) cells are used.
+A time step of 0.005 is used with a maximum CFL of approximately 0.4.
 Figure \ref{fig:cy40}a and \ref{fig:cy40}b compares the computed drag force of the modified Fadlun et al. and external Luo et al. methods respectively to that of Koumoutsakos and Leonard.
 \begin{figure}[!htb]
 	\centering
@@ -955,9 +969,8 @@ Figure \ref{fig:cy40}a and \ref{fig:cy40}b compares the computed drag force of t
 	\label{fig:cy40}
 \end{figure}
 
-For a Reynolds number of 550 a uniform grid with spacing 0.01 is used from (-0.54,-0.54) to (0.54,0.54) for a total of 186x186 cells are used.\todo{update total grid size}
-\todo{find cfl number}
-A time step of 0.0025 is used for a maximum CFL number of.
+For a Reynolds number of 550 a uniform grid with spacing 0.01 is used from (-0.54,-0.54) to (0.54,0.54) for a total of 450x450(202500) cells are used. 
+A time step of 0.0025 is used for a maximum CFL number of 0.6.
 Figure \ref{fig:cy550}a and \ref{fig:cy550}b compares the computed drag force of the modified Fadlun et al. and external Luo et al. methods respectively to that of Koumoutsakos and Leonard for a Reynolds number of 550
 \begin{figure}[!htb]
 	\centering
@@ -974,9 +987,8 @@ Figure \ref{fig:cy550}a and \ref{fig:cy550}b compares the computed drag force of
 	\label{fig:cy550}
 \end{figure}
 
-For a Reynolds number of 3000 a uniform grid with spacing 0.004 is used from (-0.52,-0.52) to (0.52,0.52) for a total of 186x186 cells are used.\todo{find correct size}
-\todo{find cfl number}
-A time step of 0.001 is used for a maximum CFL of.
+For a Reynolds number of 3000 a uniform grid with spacing 0.004 is used from (-0.52,-0.52) to (0.52,0.52) for a total of 986x986(972196) cells are used.
+A time step of 0.001 is used for a maximum CFL of 0.65.
 Figure \ref{fig:cy3000}a and \ref{fig:cy3000}b compares the computed drag force of the modified Fadlun et al. external Luo et al. methods respectively to that of Koumoutsakos and Leonard for a Reynolds number of 3000.
 \begin{figure}[!htb]
 	\centering
