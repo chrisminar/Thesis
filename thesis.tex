@@ -160,7 +160,6 @@ At this point a clever observer might notice a complication induced by the fract
 Which is correct, to enforce no slip to the intermediate velocity in the first sub step, or to velocity during the third sub step? 
 Fadlun found that when no-slip is applied during the intermediate time step, the error introduced in the velocity correction step was always negligibly small compared to the velocity. 
 $\textbf{RHS}$ and $1-\frac{\Delta t}{2}L$ from Equation \eqref{eq:Intermediate Velocity} can be setup as if they was no body, then modified at the hybrid nodes to enforce no slip with the linear interpolation. 
-The discretization of this is shown in appendix \ref{Fadlun Linear Interpolation}. 
 The Poisson Equation \ref{eq:Poisson} and projection step \ref{eq:Projection} are left unmodified in the work of Fadlun et al. 
 
 \section{Modified Fadlun} 
@@ -1432,30 +1431,116 @@ Halving the grid size causes the embedded method's computational time to increas
 \end{figure}
 
 \chapter{Conclusions} 
-Three methods seen here 
-overview of each test 
-	lid driven cavity 
-	impulsively started cylinder 
-	osc in no flow + osc in flow 
-	VIV 
-Which is best for which task
-	external for moving bodies.
-	plots of VIV forces showing oscillations in external and embedded
-	Things that could make the embedded method scale better
-		upgrade to amgx?
-	potencial multi-gpu scaling
-Tie back to original purpose: WEC
+Immersed boundary methods are a powerful numerical approach that excel at simulating complex fluid structure interactions problems. 
+This project stemmed from the desire to design wave-energy converters; devices used to harness energy from the ocean. 
+Wave-energy converters need to be highly efficient to compete with fossil fuels, yet durable enough to withstand the sea at storm. 
+The study and optimization of such a device requires an accurate and fast solver. 
+This speed is obtained through the massive parallelism of a GPU which is currently largely underutilized in commercial software. 
+cuIBM-FSI has been developed to test various immersed boundary methods on a GPU with the intent of finding the best solver for use on a complex freely moving body in incompressible flow. 
+
+To this end, three direct forcing immersed boundary methods were written.  
+The modified Fadlun method is based off the work of Fadlun et al\cite{Fadlun:2000fl}. 
+Like the original Fadlun it interpolates does away with the force calculation at the hybrid nodes in favor of interpolation between the body and nearby non-hybrid fluid nodes during the intermediate velocity step. 
+Unlike the original Fadlun it modifies the Poisson equation to maintain mass conservation. 
+The external and embedded methods are based off the work of Luo et al\cite{Luo:2012gx}. 
+Both interpolate for the pressure and intermediate velocity at hybrid nodes. 
+They also extrapolate intermediate velocities and pressure values across the body such that hybrid node values can be calculated using a standard stencil. 
+These two solutions are weighted based on the nodes distance from the body to suppress the numerical oscillations caused by moving bodies in combination with direct forcing methods. 
+The external method does the weighting, interpolation and extrapolating before and after the linear algebra solves where the embedded method does it all simultaneously inside of the linear algebra. 
+
+The three solvers were tested using five well studied bench marks. 
+The underlying Crank-Nicholson, Adams-Bashforth and fractional step used to discretize the underlying Navier--Stokes equation was tested using lid driven cavity. 
+An impulsively started cylinder test was used to test a stationary immersed body. 
+This test confirmed that the original Fadlun method has difficulty accurately predicting flow and forces in high sheer situations which led to the implementation of the modified Fadlun. 
+Two simulations were used to test the methods for an imposed body motion. 
+Both simulations use a circular body oscillating sinusoidally on the x-axis. 
+The modified Fadlun method proved unstable with moving bodies, resulting from overwhelming numerical oscillations present in all direct forcing methods with a moving body. 
+Flow in the x-direction over the oscillating cylinder is used to qualitatively assess the numerical oscillations in the method. 
+This test shows that the embedded method is better at suppressing numerical oscillations than the external method. 
+For both methods, decreasing the grid spacing, or increasing the CFL number reduces oscillations and increases accuracy. 
+Oscillations in the x-direction in a static flow field is used to quantitatively verify the two methods. 
+This simulation shows the external method to slightly less accurate than the embedded method, and reinforces the previously stated results of the in flow simulation. 
+
+The last test is vorticity induced vibration. 
+This test features bodies that are moored at the origin but free to move based on forces imparted by the flow. 
+This test is similar to a wave energy converter which will also have a restoring force based off its moorings and have its motion driven by an external flow. 
+Two methods for updating the FSI were tested, loose and strong coupling. 
+All combinations of loose and strong coupling, external and embedded were able to successfully predict the forces, position and velocity of VIV. 
+more on this when SC em is done. 
+
+So, which method is the best? 
+The external method is the best for stationary bodies as it is the fastest and all methods produced the same result. 
+For moving bodies, the external method is overwhelming faster than the embedded method and scales much better but it is more prone to oscillations and is slightly less accurate. 
+The external method is also more stable, but that seems to be mostly the fault of the linear algebra solver.
+During optimization or parameter sweeps, it may be prudent to use the external method to narrow down the field and use the embedded method afterwards for more accuracy. 
+
+To improve the embedded and external methods, improving the speed of the Poisson solve is still the most efficient(and only practical) approach. 
+Replacing the library that cuIBM-FSI uses to solve the linear algebra, CUSP, is the first step that should be taken.
+The most recent official release of CUSP was in 2014 and designed to work with CUDA 5.5. 
+cuIBM-FSI currently uses CUDA 7.5 and at the time of writing CUDA 8.0 is available. 
+Other libraries are available that have more advanced multi-grid methods that may not suffer from the same scaling problems CUSP does. 
+In addition, CUSP does not support multiple GPUs, meaning that this code can't be used on a cluster. 
 
 \bibliographystyle{plain}
 \bibliography{thesis}
 
 \appendix
-\chapter{Discretization}
-\section{Fadlun}
-\subsection{Fadlun Linear Interpolation}\label{Fadlun Linear Interpolation}
-\section{Luo}
-\subsection{Solving a system of four eqations on the gpu}\label{system of euqations}
-\subsection{a: interpolation to hybrid nodes}
-\label{a: interpolation to hybrid nodes}
+\chapter{Solving a system of four eqations on the GPU}\label{system of euqations}
+\begin{gather}
+	A = 
+	\begin{bmatrix}
+	a_{11}&a_{12}&a_{13}&a_{14}\\
+	a_{21}&a_{22}&a_{23}&a_{24}\\
+	a_{31}&a_{32}&a_{33}&a_{34}\\
+	a_{41}&a_{42}&a_{43}&a_{44}
+	\end{bmatrix}
+\end{gather}
+If:
+\begin{gather}
+det(A) =
+	\begin{matrix}
+		&  &a_{11}a_{22}a_{33}a_{44}& + &a_{11}a_{23}a_{34}a_{42}& + &a_{11}a_{24}a_{32}a_{43} \\
+		&+ &a_{12}a_{21}a_{34}a_{43}& + &a_{12}a_{23}a_{31}a_{44}& + &a_{12}a_{24}a_{33}a_{41} \\
+		&+ &a_{13}a_{21}a_{32}a_{44}& + &a_{13}a_{22}a_{34}a_{41}& + &a_{13}a_{24}a_{31}a_{42} \\
+		&+ &a_{14}a_{21}a_{33}a_{42}& + &a_{14}a_{22}a_{31}a_{43}& + &a_{14}a_{23}a_{32}a_{41} \\
+		&- &a_{11}a_{22}a_{34}a_{43}& - &a_{11}a_{23}a_{32}a_{44}& - &a_{11}a_{24}a_{33}a_{42} \\
+		&- &a_{12}a_{21}a_{33}a_{44}& - &a_{12}a_{23}a_{34}a_{41}& - &a_{12}a_{24}a_{31}a_{43} \\
+		&- &a_{13}a_{21}a_{34}a_{42}& - &a_{13}a_{22}a_{31}a_{44}& - &a_{13}a_{24}a_{32}a_{41} \\
+		&- &a_{14}a_{21}a_{32}a_{43}& - &a_{14}a_{22}a_{33}a_{41}& - &a_{14}a_{23}a_{31}a_{42} 
+	\end{matrix}
+	\neq 0
+\end{gather}
+
+Then there is an inverse of A:
+\begin{gather}
+A^{-1} = \frac{1}{det(A)}
+\begin{bmatrix}
+b_{11}&b_{12}&b_{13}&b_{14}\\
+b_{21}&b_{22}&b_{23}&b_{24}\\
+b_{31}&b_{32}&b_{33}&b_{34}\\
+b_{41}&b_{42}&b_{43}&b_{44}
+\end{bmatrix}
+\end{gather}
+where:
+\begin{align}
+	\begin{split}
+		b_{11}=&a_{22}a_{33}a_{44}+a_{23}a_{34}a_{42}+a_{24}a_{32}a_{43}-a_{22}a_{34}a_{43}-a_{23}a_{32}a_{44}-a_{24}a_{33}a_{42} \\
+		b_{12}=&a_{12}a_{34}a_{43}+a_{13}a_{32}a_{44}+a_{14}a_{33}a_{42}-a_{12}a_{33}a_{44}-a_{13}a_{34}a_{41}-a_{14}a_{32}a_{43} \\
+		b_{13}=&a_{12}a_{23}a_{44}+a_{13}a_{24}a_{42}+a_{14}a_{22}a_{43}-a_{12}a_{24}a_{43}-a_{13}a_{22}a_{44}-a_{14}a_{23}a_{42} \\
+		b_{14}=&a_{12}a_{24}a_{33}+a_{13}a_{22}a_{34}+a_{14}a_{23}a_{32}-a_{12}a_{23}a_{34}-a_{13}a_{24}a_{32}-a_{14}a_{22}a_{33} \\[1ex]
+		b_{21}=&a_{21}a_{34}a_{43}+a_{23}a_{31}a_{44}+a_{24}a_{33}a_{41}-a_{21}a_{33}a_{44}-a_{23}a_{34}a_{41}-a_{24}a_{31}a_{43} \\
+		b_{22}=&a_{11}a_{33}a_{44}+a_{13}a_{34}a_{41}+a_{14}a_{31}a_{43}-a_{11}a_{34}a_{43}-a_{13}a_{31}a_{44}-a_{14}a_{33}a_{41} \\
+		b_{23}=&a_{11}a_{24}a_{43}+a_{13}a_{21}a_{44}+a_{14}a_{23}a_{41}-a_{11}a_{23}a_{44}-a_{13}a_{24}a_{41}-a_{14}a_{21}a_{43} \\
+		b_{24}=&a_{11}a_{23}a_{34}+a_{13}a_{24}a_{31}+a_{14}a_{21}a_{33}-a_{11}a_{24}a_{33}-a_{13}a_{21}a_{34}-a_{14}a_{23}a_{31} \\[1ex]
+		b_{31}=&a_{21}a_{32}a_{44}+a_{22}a_{34}a_{41}+a_{24}a_{31}a_{42}-a_{21}a_{34}a_{42}-a_{22}a_{31}a_{44}-a_{24}a_{32}a_{41} \\
+		b_{32}=&a_{11}a_{34}a_{42}+a_{12}a_{31}a_{44}+a_{14}a_{32}a_{41}-a_{11}a_{32}a_{44}-a_{12}a_{34}a_{41}-a_{14}a_{31}a_{42} \\
+		b_{33}=&a_{11}a_{22}a_{44}+a_{12}a_{24}a_{41}+a_{14}a_{21}a_{42}-a_{11}a_{24}a_{42}-a_{12}a_{21}a_{44}-a_{14}a_{22}a_{41} \\
+		b_{34}=&a_{11}a_{24}a_{32}+a_{12}a_{21}a_{34}+a_{14}a_{22}a_{31}-a_{11}a_{22}a_{34}-a_{12}a_{24}a_{31}-a_{14}a_{21}a_{32} \\[1ex]
+		b_{41}=&a_{21}a_{33}a_{42}+a_{22}a_{31}a_{43}+a_{23}a_{32}a_{41}-a_{21}a_{32}a_{43}-a_{22}a_{33}a_{41}-a_{23}a_{31}a_{42} \\
+		b_{42}=&a_{11}a_{32}a_{43}+a_{12}a_{33}a_{41}+a_{13}a_{31}a_{42}-a_{11}a_{33}a_{42}-a_{12}a_{31}a_{43}-a_{13}a_{32}a_{41} \\
+		b_{43}=&a_{11}a_{23}a_{42}+a_{12}a_{21}a_{43}+a_{13}a_{22}a_{41}-a_{11}a_{22}a_{43}-a_{12}a_{23}a_{41}-a_{13}a_{21}a_{42} \\
+		b_{44}=&a_{11}a_{22}a_{33}+a_{12}a_{23}a_{31}+a_{13}a_{21}a_{32}-a_{11}a_{23}a_{32}-a_{12}a_{21}a_{33}-a_{13}a_{22}a_{31} 
+	\end{split}
+\end{align}
 
 \end{document}

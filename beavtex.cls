@@ -525,25 +525,25 @@
   \listoftables           % J
 
 	% Algorithm listing
-	\ifthenelse{\isundefined{\listofalgorithms}}{}{
-  \expandafter\newcommand\csname ps@loaa\endcsname{
-  \renewcommand{\@oddhead}{%
-  \parbox{\textwidth}{%
-  \centering {\heading LIST OF ALGORITHMS} \\ 
-  \uline{Algorithm}\hfill\uline{Page}}}
-  \renewcommand{\@oddfoot}{}
-  \renewcommand{\@evenfoot}{}}
-  \expandafter\newcommand\csname ps@loab\endcsname{%
-  \renewcommand{\@oddhead}{%
-  \parbox{\textwidth}{%
-  \centering {\heading LIST OF ALGORITHMS\ (Continued)} \\ 
-  \uline{Algorithm}\hfill\uline{Page}}}
-  \renewcommand{\@evenhead}{\@oddhead}
-  \renewcommand{\@oddfoot}{}
-  \renewcommand{\@evenfoot}{}}
-	\renewcommand{\listalgorithmname}{\pagestyle{loab}\thispagestyle{loaa}\vspace{-1.28in}}
-  \listofalgorithms
-  }
+%	\ifthenelse{\isundefined{\listofalgorithms}}{}{
+%  \expandafter\newcommand\csname ps@loaa\endcsname{
+%  \renewcommand{\@oddhead}{%
+%  \parbox{\textwidth}{%
+%  \centering {\heading LIST OF ALGORITHMS} \\ 
+%  \uline{Algorithm}\hfill\uline{Page}}}
+%  \renewcommand{\@oddfoot}{}
+%  \renewcommand{\@evenfoot}{}}
+%  \expandafter\newcommand\csname ps@loab\endcsname{%
+%  \renewcommand{\@oddhead}{%
+%  \parbox{\textwidth}{%
+%  \centering {\heading LIST OF ALGORITHMS\ (Continued)} \\ 
+%  \uline{Algorithm}\hfill\uline{Page}}}
+%  \renewcommand{\@evenhead}{\@oddhead}
+%  \renewcommand{\@oddfoot}{}
+%  \renewcommand{\@evenfoot}{}}
+%	\renewcommand{\listalgorithmname}{\pagestyle{loab}\thispagestyle{loaa}\vspace{-1.28in}}
+%  \listofalgorithms
+%  }
 
   \listofappendices       % K.
   \listofappendixfigures  % L.
