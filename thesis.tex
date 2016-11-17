@@ -54,38 +54,41 @@ We also thank the Barba Group for developing, maintaining, and distributing thei
 \mainmatter
 
 \chapter{Introduction}
-The 'Immersed boundary method' (IBM) is a broad term referring to a group of approaches used to simulate fluid flow over complex bodies.
-The goal of IBMs is to represent a body surface withing resorting to a body fitted mesh.
-These techniques are well-suited for simulating flow involving complex, moving bodies because they do not require re-meshing between time steps.
-We have developed an IBM solver for operation on graphics processing units (GPUs) designed to handle incompressible fluid--structure interaction problems with rigid bodies.
+The 'Immersed boundary method' (IBM) is a term referring to a group of approaches used to simulate fluid flow over complex bodies. 
+IBMs attempt to represent a body with out using a fitted mesh. 
+These techniques are well-suited for simulating flow involving complex, moving bodies because they do not require re-meshing between time steps. 
+We have developed several IBM solvers for operation on, and investigation of, graphics processing units (GPUs) designed to handle incompressible fluid--structure interaction problems with rigid bodies. 
 
-Peskin~\cite{Peskin:1972gh} created the original IBM in the 1970s to model blood flow through arteries. 
-He used the IBM to more easily represent the moving, elastic boundaries.
-The original IBM adds a forcing term to the Navier--Stokes equations that represents the force a body would apply the fluid, if it were there.
-This forcing term is modeled as a spring, $f=kx$, along with a Dirac-delta function to ensure the force only acts upon fluid nodes near the body.
-Modeling the force as a spring worked well for Peskin's purpose but proved to have several shortcomings.
-Firstly, solving for the forcing term is tedious, and the order of accuracy heavily depends on how it and the delta function are handled. \todo{site this}
-Secondly, to apply the spring model to rigid bodies, a very large spring coefficient must be used which has the inadvertent effect of making the problem stiff. 
+Peskin~\cite{Peskin:1972gh} created the original IBM in the 1970s to model biological flows. 
+He used the IBM to more easily represent the moving, elastic artery walls.
+Peskin's IBM adds a forcing term to the Navier--Stokes equations that represents the force a body would apply the fluid, if it were there.
+This forcing term is modeled as a spring, $f=kx$, and a Dirac-delta function is used to ensure the force only acts upon fluid nodes near the body.
+Modeling the force as a spring worked well for Peskin's purpose but proved to have several shortcomings. 
+Firstly, solving for the forcing term is tedious, and the order of accuracy heavily depends on how it and the delta function are handled. 
+Secondly, to apply the spring model to rigid bodies, a very large spring coefficient must be used which has the inadvertent problem of making simulations stiff. 
 
 The IBM has since evolved to be applicable to a wide range of problems, as reviewed by Mittal and Iaccarino~\cite{Mittal:2005ii} and more recently Sotiropoulos and Yang~\cite{Sotiropoulos:2014gv}. 
 The methods focused on in this work are all from a popular subgroup of IBM called direct forcing methods. 
 Mohd-Yusof~\cite{MohdYusof:1997wh} and Fadlun et al.~\cite{Fadlun:2000fl} developed two early versions of direct forcing. 
 In direct forcing, the velocities at the nodes nearest to the body are interpolated for using the body velocity, eliminating the need to solve for a forcing term while simultaneously enforcing the no-slip condition.
-\todo[inline]{add segment about lee and lee}
-However, using the direct forcing method with a moving body causes numerical oscillations~\cite{liao2010simulating}~\cite{Luo:2012gx}.
-This effect is manageable for preset motion but with a freely moving body the solver will poorly predict body position, velocity, and forces. 
-The numerical oscillations are caused by having different equations being used to solve for velocity in different regions of the domain. 
-Luo et al.~\cite{Luo:2012gx} deals with the numerical oscillations by using a weighting function to transition between the two schemes, removing the discontinuity.
+The early direct forcing methods did not include a method of modifying the Poisson equation for the presence of a body. 
+Not accounting for the body in the Poisson equation breaks conservation of mass at the body. 
+Kim et al\cite{kim2001immersed}. developed a direct forcing method that adds mass source or sink terms at nodes intersected by the boundary to satisfy the conservation equation. 
 
-The goal of this project is to develop a GPU-based solver called cuIBM-FSI for CUda(CUDA is the language used to write for the GPU) Immersed Boundary Method Fluid Structure Interaction. 
+Using the direct forcing method with a moving body causes numerical oscillations~\cite{liao2010simulating}~\cite{Luo:2012gx}.
+This effect can be manageable for preset motion but with a freely moving body the solver will poorly predict body position, velocity, and forces. 
+The numerical oscillations are caused by having different solution regimes in the domain, e.g. interpolation near the body and Navier--Stokes everywhere else. 
+Luo et al.~\cite{Luo:2012gx} deals with the numerical oscillations with a weighting function to transition between the two schemes, removing the discontinuity where the regimes transition. 
+
+The goal of this project is to develop a GPU-based solver, called cuIBM-FSI for CUda(CUDA is a GPU programming language) Immersed Boundary Method Fluid Structure Interaction. 
 The eventual purpose of cuIBM-FSI is to have a highly efficient solver to study and optimize wave energy converters. 
-To those ends, this thesis will show that cuIBM-FSI capable of simulating 2D, incompressible flow over a freely moving body. 
+This thesis will showcase cuIBM-FSI and the development of simulating 2D, incompressible flow over a freely moving body using a GPU.
 
-Chapter \ref{chapter:Numerical Methods} will discuss the theory of several direct forcing methods and their applicability to freely moving bodies. 
+Chapter \ref{chapter:Numerical Methods} discusses the theory of several direct forcing methods and their applicability to freely moving bodies. 
 Chapter \ref{chapter:Implementation} covers the discretization of various methods as well as the challenges, strategies and implementation of the GPU.
-Chapter \ref{chapter:Validation} will show the validation and verification of different aspects of the solver using five different test cases; lid driven cavity, flow over an impulsively started cylinder, forced motion of a cylinder in static flow, forced motion of a cylinder in flow and vorticity induced vibrations (VIV). 
-Chapter \ref{chapter:error} characterizes cuIBM-FSI in terms of order of accuracy and performance scaling. 
-The final chapter will discuss the results, go over problems and recommend future work.
+Chapter \ref{chapter:Validation} shows the validation and verification of different aspects of the solver using five different test cases; lid driven cavity, flow over an impulsively started cylinder, forced motion of a cylinder in static flow, forced motion of a cylinder in flow and vorticity induced vibrations (VIV). 
+Chapter \ref{chapter:error} characterizes the IBM's order of accuracy and performance scaling. 
+The final chapter will summarize, go over problems and recommend future work.
 
 \chapter{Numerical Methods}\label{chapter:Numerical Methods}
 cuIBM-FSI is comprised of three separate solvers. 
@@ -349,6 +352,12 @@ Ideally, the logic unit is able to send the exact same command to each arithmeti
 Divergence occurs when the logic unit has to send a command to some of arithmetic units while making the other ones wait. 
 This happens, for instance, during an if statement. 
 Figure~\ref{fig:divergence} shows an example body with hybrid nodes shaded light gray and ghost nodes shaded dark gray. 
+\begin{figure}[!htb]
+	\centering
+	\includegraphics[width=0.4\textwidth]{divergence}
+	\caption{Nodes near the body cause divergence. Dark gray represent ghost nodes and light gray represent hybrid nodes. Each row of cells comprises part of a warp.}
+	\label{fig:divergence}
+\end{figure}
 Cells edges are represented by the dashed lines and the warps are represented by the solid lines. 
 For simplification, each row is depicted as being part of a warp, with the remainder of the warps being made of cells to the right and left of the shown domain. 
 This is the worst situation for divergence, having the most possible differences in as few warps as possible. 
@@ -642,7 +651,7 @@ This section will detail the implementation of the modified Fadlun et al\cite{Fa
 \subsection{Intermediate Velocity}
 \label{sec:ID fadlun intermediate velocity}
 The interpolation that enforces the no slip condition happens in the intermediate velocity step. 
-To solve for intermediate velocity, the right hand side is first computed like there was no body as shown in section \ref{ID:NS intermediate velocity}. 
+To solve for intermediate velocity, the right hand side is first computed like there was no body as shown in section \ref{sec:ID NS intermediate velocity}. 
 Then, the hybrid nodes are replaced with interpolation values. 
 Equation~\eqref{eq:ID intermediate velocity interpolation} gives an example interpolation that corresponds to Figure~\ref{fig:ID linear interpolation}. 
 The coefficients inside the brackets are the values that will be placed in the left hand side matrix and the term on the right side of the equation will replace the value from \ref{eq:Expanded Intermediate Velocity}. 
@@ -1430,7 +1439,7 @@ Halving the grid size causes the embedded method's computational time to increas
 	\label{fig:performance2}
 \end{figure}
 
-\chapter{Conclusions} 
+\chapter{Summary and future work} 
 Immersed boundary methods are a powerful numerical approach that excel at simulating complex fluid structure interactions problems. 
 This project stemmed from the desire to design wave-energy converters; devices used to harness energy from the ocean. 
 Wave-energy converters need to be highly efficient to compete with fossil fuels, yet durable enough to withstand the sea at storm. 
