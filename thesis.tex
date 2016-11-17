@@ -314,9 +314,6 @@ If the hybrid node only has one neighbor, then $\Delta=0$ for the other directio
 
 \chapter{Implementaiton and Discretization}\label{chapter:Implementation}
 
-This chapter will detail the discretization of the immersed boundary method and implementation on the GPU. 
-\todo[inline]{need more here, perhaps a summary of each section?}
-
 \section{Sparse Matricies}
 When using a dense matrix, every possible spot in the matrix has a physical location in memory. 
 The matrix that represents the coefficients for intermediate velocity and pressure are comprised of mostly zeros. 
@@ -386,7 +383,6 @@ The external method does not need the preconditioner to be remade, even when its
 
 A collocated grid stores all variable information at the center of each cell.
 When discretized on a collocated grid, Navier--Stokes will yield an odd-even decoupling of pressure an velocity resulting in a checkerboard pattern unless special steps are taken to prevent it. 
-\todo[inline]{findsource for this info}
 Using a staggered grid is a relatively straightforward way to avoid odd-even decoupling.
 A staggered grid stores scalar values(pressure, temperature, density etc.) at the cell center and velocities at the cell face. 
 Staggered grids also have the advantage of not requiring a pressure boundary condition.
