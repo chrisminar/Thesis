@@ -5,13 +5,13 @@
 	{\mathop{#1}_{\textstyle #2}}%
 }
 \documentclass[onehalf,11pt]{beavtex}
-\title{GPU-Based Fluid Structure Interaction using Immersed Boundary Methods}
+\title{GPU-Based Fluid-Structure Interaction using Immersed Boundary Methods}
 \author{Christopher Minar}
 \degree{Masters of Science}
-\doctype{Masters Thesis}
+\doctype{Thesis}
 \department{Mechanical Industrial and Manufacturing Engineering}
 \depttype{School}
-\depthead{Director}
+\depthead{Head}
 \major{Mechanical Engineering}
 \advisor{Kyle Niemeyer}
 \submitdate{December 5, 2016}
@@ -22,7 +22,8 @@ However, fully harnessing GPU parallelism requires specialized algorithms and co
 This work modifies direct-forcing immersed boundary methods to model fluid-structure interaction and investigates its behavior on GPUs.
 We performed verification of our solver using lid-driven cavity flow, impulsively started flow over a cylinder, flow over a forced oscillating cylinder and vorticity induced vibration.}
 \acknowledgements{We gratefully acknowledge the support of NVIDIA Corporation with the donation of the Tesla K20 GPU used for this research.
-We also thank the Barba Group for developing, maintaining, and distributing their cuIBM code.}
+We also thank the Barba Group for developing, maintaining, and distributing their cuIBM code. 
+Thank you to my committee, everyone in the Niemeyer research group and the NNMREC lab.}
 
 \usepackage{algorithm}
 \usepackage{algorithmic}
@@ -54,93 +55,91 @@ We also thank the Barba Group for developing, maintaining, and distributing thei
 \mainmatter
 
 \chapter{Introduction}
-The 'Immersed boundary method' (IBM) is a term referring to a group of approaches used to simulate fluid flow over complex bodies. 
-IBMs attempt to represent a body with out using a fitted mesh. 
+Immersed boundary methods (IBMs) refer to a group of approaches used to simulate fluid flow over complex bodies. 
+IBMs attempt to represent a body without using a body-fitted mesh. 
 These techniques are well-suited for simulating flow involving complex, moving bodies because they do not require re-meshing between time steps. 
-We have developed several IBM solvers for operation on, and investigation of, graphics processing units (GPUs) designed to handle incompressible fluid--structure interaction problems with rigid bodies. 
+We have developed several IBM solvers for operating on, and investigation of, graphics processing units (GPUs,) designed to handle incompressible fluid--structure interaction problems with rigid bodies. 
 
 Peskin~\cite{Peskin:1972gh} created the original IBM in the 1970s to model biological flows. 
-He used the IBM to more easily represent the moving, elastic artery walls.
-Peskin's IBM adds a forcing term to the Navier--Stokes equations that represents the force a body would apply the fluid, if it were there.
-This forcing term is modeled as a spring, $f=kx$, and a Dirac-delta function is used to ensure the force only acts upon fluid nodes near the body.
-Modeling the force as a spring worked well for Peskin's purpose but proved to have several shortcomings. 
-Firstly, solving for the forcing term is tedious, and the order of accuracy heavily depends on how it and the delta function are handled. 
-Secondly, to apply the spring model to rigid bodies, a very large spring coefficient must be used which has the inadvertent problem of making simulations stiff. 
+He used the IBM to more easily represent the moving, elastic artery walls. 
+Peskin's IBM adds a forcing term to the Navier--Stokes equations that represents the force a body would apply to the fluid if it was physically present. 
+This forcing term is modeled as a spring via $f=kx$, and a Dirac-delta function ensures the force only acts upon fluid nodes near the body. 
+Modeling the force as a spring worked well for Peskin's purposes but proved to have several shortcomings. 
+First, the order of accuracy heavily depends on how it and the delta function are handled. 
+Second, to apply the spring model to rigid bodies, a large spring coefficient must be used which inadvertently makes simulations stiff. 
 
-The IBM has since evolved to be applicable to a wide range of problems, as reviewed by Mittal and Iaccarino~\cite{Mittal:2005ii} and more recently Sotiropoulos and Yang~\cite{Sotiropoulos:2014gv}. 
+IBM techniques have since evolved to be applicable to a wide range of problems, as reviewed by Mittal and Iaccarino~\cite{Mittal:2005ii} and more recently Sotiropoulos and Yang~\cite{Sotiropoulos:2014gv}. 
 The methods focused on in this work are all from a popular subgroup of IBM called direct forcing methods. 
 Mohd-Yusof~\cite{MohdYusof:1997wh} and Fadlun et al.~\cite{Fadlun:2000fl} developed two early versions of direct forcing. 
-In direct forcing, the velocities at the nodes nearest to the body are interpolated for using the body velocity, eliminating the need to solve for a forcing term while simultaneously enforcing the no-slip condition.
+Direct forcing methods interpolate for velocity at the nodes nearest to the body using the body velocity, eliminating the need to solve for a forcing term while simultaneously enforcing the no-slip condition.
 The early direct forcing methods did not include a method of modifying the Poisson equation for the presence of a body. 
-Not accounting for the body in the Poisson equation breaks conservation of mass at the body. 
+Not accounting for the body in the Poisson equation violates conservation of mass at the body. 
 Kim et al\cite{kim2001immersed}. developed a direct forcing method that adds mass source or sink terms at nodes intersected by the boundary to satisfy the conservation equation. 
 
-Using the direct forcing method with a moving body causes numerical oscillations~\cite{liao2010simulating}~\cite{Luo:2012gx}.
-This effect can be manageable for preset motion but with a freely moving body the solver will poorly predict body position, velocity, and forces. 
-The numerical oscillations are caused by having different solution regimes in the domain, e.g. interpolation near the body and Navier--Stokes everywhere else. 
-Luo et al.~\cite{Luo:2012gx} deals with the numerical oscillations with a weighting function to transition between the two schemes, removing the discontinuity where the regimes transition. 
+Using the direct forcing method with a moving body can cause numerical oscillations~\cite{liao2010simulating,Luo:2012gx}.
+This effect can be manageable for preset motion, but with a freely moving body the solver will poorly predict body position, velocity, and forces. 
+The numerical oscillations are caused by having different solution regimes in the domain, e.g., interpolation near the body and Navier--Stokes everywhere else. 
+Luo et al.~\cite{Luo:2012gx} deal with the numerical oscillations with a weighting function to transition between the two schemes, removing the discontinuity where the regimes transition. 
 
-The goal of this project is to develop a GPU-based solver, called cuIBM-FSI for CUda(CUDA is a GPU programming language) Immersed Boundary Method Fluid Structure Interaction. 
-The eventual purpose of cuIBM-FSI is to have a highly efficient solver to study and optimize wave energy converters. 
+The goal of this project is to develop a GPU-based solver, called cuIBM-FSI CUda(Compute Unified Device Architecture is a GPU programming language) Immersed Boundary Method Fluid Structure Interaction. 
+The eventual purpose of cuIBM-FSI is to have a highly efficient solver to study two-dimensional fluid structure interaction problem. 
 This thesis will showcase cuIBM-FSI and the development of simulating 2D, incompressible flow over a freely moving body using a GPU.
 
-Chapter \ref{chapter:Numerical Methods} discusses the theory of several direct forcing methods and their applicability to freely moving bodies. 
-Chapter \ref{chapter:Implementation} covers the discretization of various methods as well as the challenges, strategies and implementation of the GPU.
-Chapter \ref{chapter:Validation} shows the validation and verification of different aspects of the solver using five different test cases; lid driven cavity, flow over an impulsively started cylinder, forced motion of a cylinder in static flow, forced motion of a cylinder in flow and vorticity induced vibrations (VIV). 
-Chapter \ref{chapter:error} characterizes the IBM's order of accuracy and performance scaling. 
-The final chapter will summarize, go over problems and recommend future work.
+Chapter \ref{chapter:Numerical Methods} discusses the theory of direct forcing methods and their applicability to freely moving bodies. 
+Chapter \ref{chapter:Implementation} covers the discretization of these methods as well as the challenges, strategies, and implementation for the GPU. 
+Chapter \ref{chapter:Validation} shows the verification and validation of different aspects of the solver using five different test cases: lid-driven cavity flow, flow over an impulsively started cylinder, forced motion of a cylinder in static flow, forced motion of a cylinder in flow, and vorticity induced vibrations (VIV). 
+Chapter \ref{chapter:error} characterizes the order of accuracy and performance scaling for the IBM approaches considered. 
+The final chapter will summarize results, discuss issues encountered, and recommend future work.
 
-\chapter{Numerical Methods}\label{chapter:Numerical Methods}
-cuIBM-FSI is comprised of three separate solvers. 
-The first is modified from the work of Fadlun et al~\cite{Fadlun:2000fl}. 
-Solvers two and three are both based off the work of Luo et al~\cite{Luo:2012gx}. 
-For now, it will suffice to call these the modified Fadlun, external and embedded methods and leave their explanations for later. 
-
+\chapter{Numerical methods}\label{chapter:Numerical Methods}
+The cuIBM-FSI solver is comprised of three separate methods. 
+One modified from the work of Fadlun et al.~\cite{Fadlun:2000fl}, and two based off the work of Luo et al.~\cite{Luo:2012gx}. 
+For now, it will suffice to call these the modified Fadlun, external, and embedded methods and leave their explanations for later. 
 
 All of these methods, however, stem from the two-dimensional, incompressible form of the Navier--Stokes momentum and mass continuity equations:
 \begin{align}
 \frac{\partial \textbf{u}}{\partial t} + \nabla ( \textbf{uu} ) &= -\nabla p + \nu\nabla^{2}\textbf{u} \label{eq:NavierStokes} \\
 \nabla \cdot \textbf{u} &= 0 \label{eq:Continuity} \;.
 \end{align}
-Here, $u$ is velocity, $p$ is pressure and $\nu$ is the constant kinematic viscosity.
+where $\textbf{u}$ is velocity, $p$ is pressure and $\nu$ is the (constant) kinematic viscosity.
 
-\section{Navier--Stokes Fractional Step}\label{NM:NavierStokes}
-All three methods use fractional step~\cite{Perot1993} to solve Equations \eqref{eq:NavierStokes} and \eqref{eq:Continuity}. 
-The fractional step method breaks up the discretization of the Navier--Stokes equations. 
-Specifically, each discretized time step is comprised of three sub steps.
-In the first sub step, the momentum equations are solved without pressure to  calculate an intermediate velocity:
+\section{Navier--Stokes fractional-step}\label{NM:NavierStokes}
+All three methods use the fractional-step approach~\cite{Perot1993} to solve Equations \eqref{eq:NavierStokes} and \eqref{eq:Continuity}, which breaks up the discretization of the Navier--Stokes equations. 
+Specifically, each discretized time step is comprised of three sub-steps.
+In the first sub-step, the momentum equations are solved without pressure to  calculate an intermediate velocity:
 \begin{equation}\label{eq:Intermediate Velocity}
 \hat{\textbf{u}} - \frac{\Delta t}{2}L(\hat{\textbf{u}}) = \textbf{u}^n + \Delta t(\textbf{RHS}^n) \;,
 \end{equation}
-where $\hat{\textbf{u}}$ is the intermediate velocity, $\Delta t$ is the time step, $L$ is the Laplacian operator and $\textbf{RHS}$ is the discretized advection and diffusion terms. 
-The superscript $n$ represents the time step. 
+where $\hat{\textbf{u}}$ is the intermediate velocity, $\Delta t$ is the time step, $L$ is the Laplacian operator, and $\textbf{RHS}$ is the discretized advection and diffusion terms. 
+The superscript $n$ represents the time step corresponding to time $t^n$. 
 In time, second-order Adams--Bashforth and Crank--Nicolson methods are used to discretize the advection and diffusion terms, respectively. 
+The implicit Crank-Nicolson method is used for the diffusion term because it is stable and the explicit Adams--Bashforth is used because it's difficult to discretize a non-linear term implicitly. 
 
-In the second sub step, the continuity equation is imposed to approximate the pressure, $p$, resulting in the Poisson equation:
+In the second sub step, the continuity equation is imposed to approximate the pressure, $p$, resulting in a Poisson equation:
 \begin{equation}\label{eq:Poisson}
 \nabla^2p^{n+1} = - \frac{\nabla\hat{\textbf{u}}}{\Delta t} \;,
 \end{equation}
 
-Velocity is updated in the last sub step with:
+where $n+1$ indicates the value at the next time step. Velocity is updated in the last sub step with:
 \begin{equation}\label{eq:Projection}
 \textbf{u}^{n+1} = \hat{\textbf{u}} - \Delta t\nabla p^{n+1} \;.
 \end{equation}
 
-\section{Node Identification}
-To facilitate the discussion of IBMs the nomenclature with regards to point identification will be explained here. 
-The nomenclature is mostly adopted from the work of Luo et al.\cite{Luo:2012gx}
+\section{Node identification}
+To facilitate the discussion of IBMs, the nomenclature with regards to point identification will be explained here. 
+The nomenclature is mostly adopted from the work of Luo et al.~\cite{Luo:2012gx}. 
 There are four types of nodes. 
 Not all node types are used in each method, and the methods treat nodes differently. 
 Nodes immediately outside the body are called hybrid nodes. 
-In all three methods, the hybrid nodes are interpolated for using the body and fluid nodes near the body. 
-Everything outside of the body that isn't a hybrid node is a fluid node. 
+In all three methods values at the hybrid nodes are interpolated for using values at the body and fluid nodes near the body. 
+Everything outside of the body that is not a hybrid node is a fluid node. 
 Fluid nodes are solved with the Navier--Stokes equations. 
-Nodes immediately inside the body are ghost nodes and work largely the same as Mittal et al.\cite{Mittal:2005ii}. 
-The Fadlun(and modified Fadlun) method doesn't use these but the external and embedded methods both try to set these values in a way that enforces the body's boundary conditions, more on this in section~\ref{Sec:Field Extrapolation}. 
-Everything else (all nodes inside the body that are not ghost nodes) are solid nodes. 
-The treatment of solid nodes doesn't effect the solution but it does affect the computational time and force calculation.
-If solid nodes are solved for an arbitrary flow field will develop inside the body. 
-An example body and grid with labeled nodes is shown in Figure~\ref{fig:node id}. 
+Nodes immediately inside the body are ghost nodes and behave similar to Mittal et al.~\cite{Mittal:2005ii}. 
+The Fadlun (and modified Fadlun) method does not use these, but the external and embedded methods both try to set the values at the nodes in a way that enforces the body's boundary conditions, this will be discussed more in section~\ref{Sec:Field Extrapolation}. 
+Everything else (i.e., all nodes inside the body that are not ghost nodes) are solid nodes. 
+The treatment of solid nodes does not affect the solution, but it does affect the computational time and force calculation.
+If solid nodes are solved, an arbitrary flow field will develop inside the body. 
+Figure~\ref{fig:node id} shows an example body and grid with labeled nodes. 
 
 \begin{figure}[!htb]
 	\centering
@@ -149,9 +148,9 @@ An example body and grid with labeled nodes is shown in Figure~\ref{fig:node id}
 	\label{fig:node id}
 \end{figure}
 
-\section{Fadlun}
-In Peskin's\cite{Peskin:1972gh} original IBM(Peskin has developed many iterations of the IBM) a forcing term $f$ in Equation \eqref{eq:NavierStokes} is solved for at the hybrid nodes in a way that enforces no-slip. 
-In the direct forcing methods developed by Fadlun\cite{Fadlun:2000fl} and Yusof\cite{MohdYusof:1997wh} the Navier--Stokes equation isn't solved at the hybrid nodes. 
+\section{Fadlun method}
+Peskin's original IBM~\cite{Peskin:1972gh} solved for a forcing term $f$ in Equation \eqref{eq:NavierStokes} at the hybrid nodes in a way that enforces the no-slip boundary condition. 
+The direct forcing methods developed by Fadlun~\cite{Fadlun:2000fl} and Yusof~\cite{MohdYusof:1997wh} do not solve the Navier--Stokes equation at the hybrid nodes. 
 Instead, the velocity at the hybrid node is approximated by linearly interpolating between the second closest node and the body surface as seen in Figure~\ref{fig:2}. 
 \begin{figure}[!htb]
 	\centering
@@ -159,71 +158,68 @@ Instead, the velocity at the hybrid node is approximated by linearly interpolati
 	\caption{A simplified diagram of linear interpolation for velocity values at a hybrid node}
 	\label{fig:2}
 \end{figure}
-At this point a clever observer might notice a complication induced by the fractional step method. 
-Which is correct, to enforce no slip to the intermediate velocity in the first sub step, or to velocity during the third sub step? 
-Fadlun found that when no-slip is applied during the intermediate time step, the error introduced in the velocity correction step was always negligibly small compared to the velocity. 
-$\textbf{RHS}$ and $1-\frac{\Delta t}{2}L$ from Equation \eqref{eq:Intermediate Velocity} can be setup as if they was no body, then modified at the hybrid nodes to enforce no slip with the linear interpolation. 
-The Poisson Equation \ref{eq:Poisson} and projection step \ref{eq:Projection} are left unmodified in the work of Fadlun et al. 
+At this point a clever observer might notice a complication induced by the fractional step method: should no slip be enforced on the intermediate velocity in the first sub-step, or the velocity during the third sub-step? 
+Fadlun et al.~\cite{Fadlun:2000fl} found that when no-slip is applied during the intermediate time step, the error introduced in the velocity correction step was always negligibly small compared to the velocity. 
+$\textbf{RHS}$ and $1-\frac{\Delta t}{2}L$ from Equation \eqref{eq:Intermediate Velocity} can be set up as if there was no body, then modified at the hybrid nodes to enforce no slip with the linear interpolation. 
+The Poisson equation \eqref{eq:Poisson} and projection step in equation \eqref{eq:Projection} are left unmodified in the work of Fadlun et al.~\cite{Fadlun:2000fl}. 
 
-\section{Modified Fadlun} 
-In the impulsively started cylinder simulation, section \ref{sec:cylinder}, the Fadlun method proved mediocre at predicting force in the transient section (while the boundary layer was developing). 
-This happens because the Poisson equation is not modified to account for the presence of a body causing the continuity equation will not be satisfied. 
-There are many proposed and tested solutions to this issue. 
-Depending on the type of simulation this can create significant creation or destruction of mass at the body, leading to poor solver accuracy.
-Kim et al~\cite{kim2001immersed}. added mass source or sink terms to the continuity equations at cells cut by the body surface. 
-Mittal et al\cite{mittal2008versatile}. imposes no-slip by extrapolating velocity data outside the body to ghost nodes. 
-Luo et al\cite{Luo:2012gx}. also extrapolates inwards in addition to enforcing an approximate pressure boundary condition. 
-cuIBM-FSI's modified Fadlun method uses a cut cell approach to fix the mass continuity issue. 
-This is explained in more detail in section~\ref{sec:modified fadlun}.
+\section{Modified Fadlun method} 
+As will be described in more detail later (section \ref{sec:cylinder}), the original Fadlun method proved mediocre at predicting force in the transient region (while the boundary layer was developing in the impulsively started cylinder simulation). 
+This happens because the Poisson equation is not modified to account for the presence of a body, causing violations of the continuity equation. 
+Depending on the type of simulation this can create significant creation or destruction of mass at the body, leading to poor solver accuracy. 
+A number of methods have been proposed and tested to fix this issue. 
+Kim et al.~\cite{kim2001immersed} added mass source or sink terms to the continuity equations at cells cut by the body surface. 
+Mittal et al.~\cite{mittal2008versatile} imposed no-slip by extrapolating velocity data outside the body to ghost nodes. 
+Luo et al.~\cite{Luo:2012gx} also extrapolated inwards in addition to enforcing an approximate pressure boundary condition. 
+Here, cuIBM-FSI's modified Fadlun method uses a cut-cell approach to fix the mass continuity issue. 
+This is explained in more detail in Section~\ref{sec:modified fadlun}.
 
-\section{Luo}
+\section{Luo method}
 
-Direct forcing methods suffer from numerical oscillation when the immersed body is moving~\cite{Sotiropoulos:2014gv}~\cite{Mittal:2005ii}~\cite{liao2010simulating}.
+Direct forcing methods suffer from numerical oscillation when the immersed body is moving~\cite{Sotiropoulos:2014gv, Mittal:2005ii, liao2010simulating}. 
 As the body moves, background nodes change how they calculate values. 
-For example Figure~\ref{fig:Temporal Discontinuity} depicts a bulk fluid $u$ velocity node at time step $t^n$ become a hybrid node at time step $t^{n+1}$.
-As the node transitions the intermediate velocity will change from being calculated by Navier--Stokes (Equation ~\eqref{eq:Intermediate Velocity}) to an interpolation (Equation~\eqref{eq:ID intermediate velocity interpolation} or \eqref{eq:Interpolation}). 
-Both equations are correct representations for the intermediate velocity but they have different errors associated with them which causes the calculated velocity to be slightly different. 
+For example, Figure~\ref{fig:Temporal Discontinuity} depicts a bulk-fluid $u$ velocity node at time step $t^n$ becoming a hybrid node at time step $t^{n+1}$. 
+As the node transitions, the intermediate velocity will change from being calculated by Navier--Stokes (Equation~\eqref{eq:Intermediate Velocity}) to an interpolation (Equation~\eqref{eq:Interpolation}). 
+Both equations are correct representations for the intermediate velocity, but they have different errors associated with them, which cause the calculated velocities to be slightly different. 
 This discontinuous change in velocity is responsible for the numerical oscillations. 
-Note that this effect happens whenever any node transitions, not just the intermediate $u$ velocity nodes.
+This effect happens whenever any node transitions, not just the intermediate $u$ velocity nodes.
 
 \begin{figure}[!htb]
     \centering
     \includestandalone[width=0.5\linewidth]{figure/node_transition_figure}
-    \caption{A diagram illustrating the immersed body's interaction with the background grid that causes numerical oscillations.}
+    \caption{A diagram illustrating the immersed body's interaction with the background grid that causes numerical oscillations. The solid line represents the body at time $t^n$ and the dashed line represents the body at time $t^{n+1}$.}
     \label{fig:Temporal Discontinuity}
 \end{figure}
 
 In the method proposed by Luo et al.~\cite{Luo:2012gx}, hybrid node values are calculated via both Navier--Stokes and interpolation.
 The final value at the hybrid node is a weighted combination of both solutions. 
-The weighting is designed smooth the transition between solutions. 
-When the hybrid node is close to the body, it will be dominated by the interpolated solution, while a the hybrid node far from the body will be dominated by the Navier--Stokes solution. 
-This process is elaborated on in section \ref{Sec:Weighting}. 
-To get a valid result at the hybrid nodes using the Navier--Stokes equations the field values (velocity and pressure) must be extrapolated across the body using appropriate boundary conditions. 
-This process is elaborated on in section \ref{Sec:Field Extrapolation}. 
-
+The weighting is designed to smooth the transition between solutions. 
+When the hybrid node is close to the body, it will be dominated by the interpolated solution, while a hybrid node far from the body will be dominated by the Navier--Stokes solution. 
+This process is discussed more in Section \ref{Sec:Weighting}. 
+The field values (velocity and pressure) must be extrapolated across the body using appropriate boundary conditions to get a valid result at the hybrid nodes using the Navier--Stokes equations, discussed in Section \ref{Sec:Field Extrapolation}. 
 
 \subsection{Field extrapolation to ghost nodes}
 \label{Sec:Field Extrapolation}
 
-Navier--Stokes can be used to calculate values at the hybrid nodes if the ghost nodes are modified to correctly represent the presence of the body. 
-If the slope of velocity between the hybrid node and the body is assumed to be linear then the slope can be extrapolated inwards to the ghost node. 
-A simple example of this can be seen in Figure~\ref{Fig: Simple Interpolation}. 
+The Navier--Stokes equations can be used to calculate values at the hybrid nodes if the ghost nodes are modified to correctly represent the presence of the body. 
+If the slope of velocity between the hybrid node and the body is assumed to be linear, then the slope can be extrapolated inwards to the ghost node. 
+Figure \ref{Fig: Simple Interpolation} shows a simple example of this. 
 The ghost node is set such that the velocity is zero via linear interpolation between the ghost and hybrid nodes. 
-When Navier--Stokes is then solved, the fluid velocity at the body surface will be calculated as the velocity of the body, mimicking the no slip boundary condition. 
+When the Navier--Stokes equations are then solved, the fluid velocity at the body surface will be calculated as the velocity of the body, mimicking the no-slip boundary condition. 
 \begin{figure}[!htb]
 	\centering
 	\includestandalone[width=0.5\linewidth]{basic_extrapolation}
-	\caption{A simple 1D, linear extrapolation example}
+	\caption{A simple 1D, linear extrapolation example.}
 	\label{Fig: Simple Interpolation}
 \end{figure}
-In the actual Luo et al~\cite{Luo:2012gx}. method, field values are extrapolated across the body using 2D bilinear interpolation.
-Unlike Luo et al., cuIBM-FSI uses a staggered grid, causing the extrapolation process to have three variations; one for pressure and ones for $u$ and $v$ velocity nodes. 
-Values are first interpolated for at an image point outside the body using the surrounding field values and the boundary condition. 
+In the original Luo et al.~\cite{Luo:2012gx} method, field values are extrapolated across the body using 2D bilinear interpolation. 
+Unlike the work of Luo et al.~\cite{Luo:2012gx}, which used a collocated grid, cuIBM-FSI uses a staggered grid, causing the extrapolation process to have three variations: one for pressure, one for $u$ velocity nodes, and one for $v$ velocity nodes. 
+Values are first interpolated for at an image point, represented by triangles in Figure~\cite{fig:Ghost node extrapolation}, outside the body using the surrounding field values and the boundary condition. 
 The 2D bilinear interpolation approximates the field between four nodes surrounding the image point with Equation~\eqref{eq:Interpolation}. 
-Each node surrounding the image point is used to set up a system of four equations to solve for the coefficients of~\eqref{eq:Interpolation}, which can then be used to solve for the field values. 
+Each node surrounding the image point is used to set up a system of four equations to solve for the coefficients of Equation~\eqref{eq:Interpolation}, which can then be used to solve for the field values. 
 Some of the interpolation nodes will be moved to account for the presence of the body.
-In Figure~\ref{fig:Ghost node extrapolation} the bottom left corner of each interpolation region is moved to the body intercept.
-\begin{figure}[htb]
+In Figure~\ref{fig:Ghost node extrapolation} the bottom left corner of each interpolation region is moved to the body intercept point.
+\begin{figure}[!htb]
 	\centering
 	\includestandalone[width=0.5\linewidth]{GN_interp_figure}
 	\caption{A detailed schematic $u$ velocity extrapolation to ghost nodes.}
@@ -232,47 +228,47 @@ In Figure~\ref{fig:Ghost node extrapolation} the bottom left corner of each inte
 
 The ghost nodes, indicated by solid squares, are projected onto the surface to find the body intercept, indicated by the thick open circle. 
 Body nodes used to track the body's position are not the same as the body intercept and the two are typically not coincident. 
-If the body has curvature, the body intercept will not fall exactly on the body due to the discrete representation of the body. 
-The line drawn between the body intercept and ghost node will be perpendicular to the tangent line at the body intercept, i.e. the ghost node is projected along the surface normal. 
+If the body has curvature, the body intercept will not fall exactly on the body due to its discrete representation of the body. 
+The line drawn between the body intercept and ghost node will be perpendicular to the tangent line at the body intercept, i.e., the ghost node is projected along the surface normal. 
 That line is then mirrored over the surface to find the image point, indicated by the solid triangle. 
 
-The rules to determine which values are used to interpolate for the image point are as follows:
-If one of the four interpolation nodes is inside the body, as seen in the extrapolation for GN 1 in Figure~\ref{fig:Ghost node extrapolation}, then that node is moved to the body intercept and the boundary condition is used. 
+The rules to determine which values are used to interpolate for the image point are as follows: 
+If one of the four interpolation nodes is inside the body, as seen in the extrapolation for ghost node 1 in Figure~\ref{fig:Ghost node extrapolation}, then that node is moved to the body intercept and the boundary condition is used. 
 It is possible for multiple corners to be inside the body. 
 Any corner inside the body will always be a ghost node and have its own, corresponding body intercept. 
-All corners inside the body are moved to their corresponding BI such that there are always four corners in separate locations to use for the interpolation. 
-If none of the four field values are inside the body as seen in the extrapolation for GN 2 then the node closest to the body intercept is moved to the body intercept.
+All corners inside the body are moved to their corresponding body intercept such that there are always four corners in separate locations to use for the interpolation. 
+If none of the four field values are inside the body as seen in the extrapolation for ghost node 2, then the node closest to the body intercept is moved to the body intercept.
 To satisfy the no slip condition at the body, a Dirichlet boundary condition equal to the body velocity is used when extrapolating for velocity ghost nodes. 
-The pressure boundary condition is approximated by forcing the slope of pressure normal to the body surface, $\frac{dp}{dn}$, as constant using the Neumann Equation~\eqref{eq:Neumann}. 
-Using the relocated corners, a system of equations is set up to solve for the coefficients in Equation~\eqref{eq:Interpolation}.
+The pressure boundary condition is approximated by forcing the slope of pressure normal to the body surface, $\frac{dp}{dn}$, as constant using Neumann boundary conditions, Equation~\eqref{eq:Neumann}. 
+Using the relocated corners, a system of equations is set up to solve for the coefficients in Equation~\eqref{eq:Interpolation}. 
 Pressure nodes on the body use Equation~\eqref{eq:Neumann Node} in the system, which is simply the derivative of Equation~\eqref{eq:Interpolation}. 
 \begin{align}
 \phi (x,y) = a_0 + a_1 x + a_2y + a_3 x y \label{eq:Interpolation} \\
 \phi (x,y) = a_1 + a_2 + a_3 (x+y) \label{eq:Neumann Node} \\
-\left. \frac{\partial p}{\partial \textbf{n}}\right|_{BI} = \left. -\rho \frac{D\textbf{u}}{Dt}\cdot \textbf{n}\right|_{BI}
+\left. \frac{\partial p}{\partial \textbf{n}}\right|_{BI} = \left. -\rho \frac{D\textbf{u}}{Dt}\cdot \hat{\textbf{n}}\right|_{BI}
 \label{eq:Neumann}\;.
 \end{align}
-$\phi$ is the variable being interpolated ($u$, $v$, or pressure); $a_0$, $a_1$, $a_2$ and $a_3$ are coefficients, and $x$ and $y$ give the node location.
-$\rho$ is the density, $D\textbf{u}\left/Dt\right.$ is the material derivative, and $\textbf{n}$ is the unit vector normal to the body.
-Solving this system on the GPU requires direct inversions of the $4 \times 4$ matrices.
-This process is elaborated on in \ref{system of euqations}. 
-Once the $a$ coefficients have been found, the field value at the image point can be calculated with equation~\eqref{eq:Interpolation} and extrapolated across the surface using equation~\eqref{eq:Velocity Interpolation} for velocity or ~\eqref{eq:Pressure Interpolation} for pressure. 
-$\Delta l$ is the distance from ghost node to image point.
+where $\phi$ is the variable being interpolated ($u$, $v$, or $p$); $a_0$, $a_1$, $a_2$ and $a_3$ are coefficients; $x$ and $y$ give the node location;
+$\rho$ is the density; $D\textbf{u}\left/Dt\right.$ is the material derivative; and $\textbf{n}$ is the unit vector normal to the body.
+Solving this system on the GPU requires direct inversions of the $4 \times 4$ matrices. 
+Appendix \ref{system of euqations} details this procedure. 
+Once the $a$ coefficients have been found, the field value at the image point can be calculated with Equation~\eqref{eq:Interpolation} and extrapolated across the surface using Equation~\eqref{eq:Velocity Interpolation} for velocity or ~\eqref{eq:Pressure Interpolation} for pressure: 
+
 \begin{align}
 \textbf{u}_{GN} &= 2\textbf{u}_{BI} - \textbf{u}_{IP} \label{eq:Velocity Interpolation} \\
-p_{GN} &= p_{ip} - \Delta l \left. \frac{\partial p}{\partial \textbf{n}}\right|_{BI} \;, \label{eq:Pressure Interpolation}
+p_{GN} &= p_{IP} - \Delta l \left. \frac{\partial p}{\partial \textbf{n}}\right|_{BI} \;, \label{eq:Pressure Interpolation}
 \end{align}
-
+where the subscripts GN, BI and IP indicate ghost nodes, body intercept and image point. $\Delta l$ is the distance from ghost node to image point.
 \subsection{Interpolation to hybrid nodes}
 \label{Sec:Interpolation}
 
 Interpolating for the field value at the hybrid node is largely the same as interpolating for the ghost nodes' image point described previously. 
 The body intercept is once again found by projecting the hybrid node along the surface normal. 
-The image point is not used in the same way as the ghost node image point is. 
-If a given body intercept is located at $(x_{BI},y_{BI})$ and its hybrid node is located at $(x_{BI}+\Delta x,y_{BI}+\Delta y)$ the corresponding image point is located at $(x_{BI}+2\Delta x,y_{BI}+2\Delta y)$ as shown in Figure~\ref{fig:Interpolate}. 
-In hybrid node case, an image points only purpose is locating the four interpolation nodes, one of which will always be the corresponding hybrid node. 
+The image point is not used in the same way as the ghost node image point. 
+If a given body intercept is located at $(x_{BI},y_{BI})$ and its hybrid node is located at $(x_{BI}+\Delta x,y_{BI}+\Delta y)$, the corresponding image point is located at $(x_{BI}+2\Delta x,y_{BI}+2\Delta y)$ as shown in Figure~\ref{fig:Interpolate}. 
+In the hybrid node case, an image points purpose is locating the four interpolation nodes, one of which will always be the corresponding hybrid node. 
 The interpolation node coincident with the hybrid node is moved to the body intercept and the appropriate boundary condition for velocity or pressure is applied.
-Once equation~\eqref{eq:Interpolation} is solved, the hybrid node is interpolated for.
+Once Equation~\eqref{eq:Interpolation} is solved, the hybrid node is interpolated for.
 
 \begin{figure}[!htb]
 	\centering
@@ -281,19 +277,19 @@ Once equation~\eqref{eq:Interpolation} is solved, the hybrid node is interpolate
 	\label{fig:Interpolate}
 \end{figure}
 
-\subsection{Weighting}
+\subsection{Weighting at hybrid nodes}
 \label{Sec:Weighting}
 
-Instead of the Dirac-delta style transition at the body of traditional direct forcing methods, Luo et al.~\cite{Luo:2012gx} introduced a smooth transition between solution regimes.
-Its purpose is to dampen the numerical oscillations that results from the discontinuous switch. 
-The scalar $\alpha$ is introduced to the solutions for intermediate velocity and the pressure:
+Instead of the Dirac-delta style transition at the body of traditional direct-forcing methods, Luo et al.~\cite{Luo:2012gx} introduced a weighting factor to smooth transition values between solution regimes. 
+Its purpose is to dampen the numerical oscillations that result from the discontinuous switch. 
+The weighting scalar $\alpha$ is introduced to the solutions for intermediate velocity and the pressure:
 \begin{equation}\label{eq:Weight}
-\theta = \left(1-\alpha \right)\theta_{Navier-Stokes} + \alpha \theta_{Interpolated} \;,
+\theta = \left(1-\alpha \right)\theta_{\text{Navier-Stokes}} + \alpha \theta_{\text{Interpolated}} \;,
 \end{equation}
 where $\theta$ represents either intermediate velocity or pressure.
 Transitioning between the Navier--Stokes and interpolated solutions should meet three criteria:
 \begin{enumerate}
-	\item Hybrid nodes farther from the body should favor the Navier-Stokes solution ($\alpha \rightarrow 0$ as distance $\uparrow$).
+	\item Hybrid nodes farther from the body should favor the Navier--Stokes solution ($\alpha \rightarrow 0$ as distance $\uparrow$).
 	\item Hybrid nodes closer to the body should favor the interpolated solution ($\alpha \rightarrow 1$ as distance $ \rightarrow 0$).
 	\item The weighting function should be smooth and continuous as the hybrid node moves away from the body.
 \end{enumerate}
@@ -303,94 +299,97 @@ To solve for $\alpha$, it is assumed that each hybrid node has at most two neigh
 \label{eq:Alpha}
 \end{equation}
 where $\Delta_1$ and $\Delta_2$ correlate to GN$_1$ and GN$_2$, respectively, and $\Delta x$ and $\Delta y$ are the grid spacing in the $x$ and $y$ directions, respectively. 
-As described in Luo et al. and shown in Figure~\ref{fig:Weight}, $\Delta_1$ and $\Delta_2$ are the closest distances between the body and the $x$ and $y$ ghost nodes, respectively. 
+As described by Luo et al.~\cite{Luo:2012gx} and shown in Figure~\ref{fig:Weight}, $\Delta_1$ and $\Delta_2$ are the closest distances between the body and the $x$ and $y$ ghost nodes, respectively. 
 If the hybrid node only has one neighbor, then $\Delta=0$ for the other direction. 
-\begin{figure}[htb]
+\begin{figure}[!htb]
 	\centering
 	\includestandalone[width=0.5\textwidth]{alpha_figure}
 	\caption{Schematic of the calculation of $\alpha$ for u velocity nodes.}
 	\label{fig:Weight}
 \end{figure}
 
-\chapter{Implementaiton and Discretization}\label{chapter:Implementation}
-
-\section{Sparse Matricies}
-When using a dense matrix, every possible spot in the matrix has a physical location in memory. 
-The matrix that represents the coefficients for intermediate velocity and pressure are comprised of mostly zeros. 
-It is inefficient to store the entirety a so called sparse matrix. 
-cuIBM-FSI stores sparse matrices in the COO format. 
-A COO matrix stores each entry as three values, row, column and value. 
+\chapter{Implementation and Discretization}\label{chapter:Implementation}
+\todo{write segment here itroducing chapter 3}
+\section{Sparse matrices}
+When using a dense matrix, every possible element of the matrix has a physical location in memory. 
+The matrix that represents the coefficients for intermediate velocity and pressure are comprised of mostly zeros, i.e., it is sparse. 
+It is impractical to store the entirety of a sparse matrix in memory. 
+cuIBM-FSI stores sparse matrices in the COO (coordinate list) format. 
+A COO matrix stores each entry as three values: row, column, and value. 
 CUSP represents each COO matrix as three separate arrays. 
-On a CPU as each node is stepped through its values can be added to the next location in the COO arrays. 
-If a GPU were to attempt this, a race condition would occur. 
-To prevent the race condition each node must have a predetermined location in the array. 
-Nodes at the corners, sides and center of the domain have three, four and five matrix entries, respectively. 
-This is determined by how many neighbors each node depends on. 
-Each GPU thread calculates the total entries before it and starts placing its nodes appropriately. 
-The nodes are counted from left to right, top to bottom. 
-In the kernel that generates the COO matrix, each node will be handled by a single thread. 
-The thread knows the first array location and the number of entries it should be adding, which it then does at it sees fit.
+On a CPU each node is stepped through in order and its values are added to the next available location in the COO arrays. 
+When adding values to a sparse matrix with a GPU, each node much have a predetermined location or a race condition would occur. 
+Nodes at the corners, sides, and center of the domain have three, four, and five matrix entries, respectively. 
+One of each neighboring node and one for the center node. 
+The total number of entries is calculated before anything is added to the sparse matrix. 
+The nodes are from left to right, top to bottom. 
+In the kernel (a kernel is a fancy name for a GPU function) that generates the COO matrix, each node is handled by a single thread. 
+When the GPU is adding values to the matrix, each thread has a predetermined location for its entries based on where the node is in the domain. 
+
+
 
 \section{GPU implementation strategy}
 \label{GPU implementation strategy}
-cuIBM-FSI is developed for full GPU operation to improve performance relative to CPU-based algorithms. 
+cuIBM-FSI is developed for full GPU operation to improve performance relative to CPU-based algorithms or partial GPU-accelerated approaches which involve significant CPU-GPU communication. 
 To this end, several overarching strategies have been implemented. 
+
 First, all calculations are performed on the GPU, and all data is stored on the GPU.
 Typically, efforts are taken to avoid thread divergence when writing code for a GPU. 
-We found it favorable to write kernels with occasionally poor thread-parallel performance, i.e., kernels with significant divergence, rather than copying data to the host to do calculations to reduce divergence. 
-Increasing the parallel performance of kernels has little effect on the overall solver performance because solving the Poisson equation typically takes more than \SI{90}{\percent} of the total computational time. 
-In our experiences, transferring data back and forth took significantly more time than would be saved by running some operations on a CPU. 
-
+I found it favorable to write kernels with occasionally poor thread-parallel performance, i.e., kernels with significant divergence, rather than copying data to the host to do calculations to reduce divergence. 
+Increasing the parallel performance of kernels has little effect on the overall solver performance, because solving the Poisson equation typically takes more than \SI{90}{\percent} of the total computational time. 
+In my experience, transferring data back and forth took significantly more time than would be saved by running some operations on a CPU. 
 In addition to non-Poisson kernels being a low overall portion of the run time, the effect of the divergence turns out to be small. 
-For most kernels, the divergence occurs in cells that are near the body because handling hybrid, ghost, fluid and solid nodes requires if statements. 
+For most kernels, the divergence occurs in cells near the body because differentiating between hybrid, ghost, fluid, and solid nodes requires if statements. 
 Divergence happens due to the hardware operating inside of a GPU. 
-A GPU is made up of some number of logic units, each of which controls thirty two arithmetic units. 
+A GPU is made up of some number of logic units, each of which controls some number arithmetic units. 
+The number of logic units is determined by the GPU model, and current NVIDIA GPU architecture has 32 arithmetic units. 
 Ideally, the logic unit is able to send the exact same command to each arithmetic unit. 
 Divergence occurs when the logic unit has to send a command to some of arithmetic units while making the other ones wait. 
-This happens, for instance, during an if statement. 
+This happens, for instance, during an if-then statement. 
 Figure~\ref{fig:divergence} shows an example body with hybrid nodes shaded light gray and ghost nodes shaded dark gray. 
 \begin{figure}[!htb]
 	\centering
-	\includegraphics[width=0.4\textwidth]{divergence}
+	\includestandalone[width=0.6\textwidth]{divergence}
 	\caption{Nodes near the body cause divergence. Dark gray represent ghost nodes and light gray represent hybrid nodes. Each row of cells comprises part of a warp.}
 	\label{fig:divergence}
 \end{figure}
 Cells edges are represented by the dashed lines and the warps are represented by the solid lines. 
 For simplification, each row is depicted as being part of a warp, with the remainder of the warps being made of cells to the right and left of the shown domain. 
-This is the worst situation for divergence, having the most possible differences in as few warps as possible. 
-The fluid and solid nodes are all treated the same and each only take one pass with the logic unit. 
-Assuming the worst case scenario that each ghost and hybrid node requires its own pass, the total number of passes for each row is \numlist{1;4;6;4;4;4;4;6;4;1}. 
-Each additional pass that each warp has to make can be considered the same as adding thirty two more nodes to the simulation. 
+This is the worst situation for divergence: the most possible differences in as few warps as possible. 
+The fluid and solid nodes are all treated the same and each only takes one pass with the logic unit. 
+Assuming the worst case scenario---each ghost and hybrid node requires its own pass---the total number of passes for each row is \numlist{1;4;6;4;4;4;4;6;4;1}. 
+Each additional pass that each warp has to make can be considered the same as adding 32 more nodes to the simulation. 
 In the example so far, the 320 cells of the ten warps partially shown would take approximately 1200 cells worth of computational time. 
-A times four slow down is pretty bad but the number of cells near the body is very small compared to the overall simulation. 
-In the first test discussed in chapter \ref{chapter:Validation}, the cells near the body account for approximately 10\% of the overall cell count.
+A factor of four slow-down is bad but the number of cells near the body is very small compared to the overall simulation. 
+In the first test discussed in Chapter \ref{chapter:Validation}, the cells near the body account for approximately 10\% of the overall cell count.
 
 
 Data transfer time is particularly relevant when moving from a stationary body to a moving body.
-When simulating a stationary body, several calculations only need to be performed once, such as the left side matrices, node identification and preconditioners.
-When simulating a moving body, these values need to be recalculated every time step, causing a total computational cost for each nearly as high as the Poisson equation solve (typically the most expensive step). 
-This relates to the second strategy: evaluate algorithm performance compared to the Poisson equation. 
+When simulating a stationary body, several calculations only need to be performed once: the left-hand side matrices of Equations ~\eqref{eq:Intermediate Velocity} and \eqref{eq:Poisson}, node identification, and preconditioners. 
+When simulating a moving body, these values need to be recalculated every time step. 
+If arrays need to be transfered back and fourth between the CPU and GPU to recalculate those every time step a lot of time is wasted.
+The transferring can take as long as the Poisson equation solve (typically by far the longest step). 
 
 The third strategy comes from Layton et al.~\cite{layton2011cuibm}.
-When using the Cusp library to perform the multigrid method, creating the preconditioner can take as much time as solving the Poisson equation.
+When using the CUSP library to perform the multigrid method, creating the preconditioner can take as much time as solving the Poisson equation.
 In a moving-body simulation, the preconditioner is normally recalculated each time step, but Layton et al.~\cite{layton2011cuibm} found it possible to skip some time steps without loss of fidelity.
-Here, we recalculate the preconditioner only if solution of the previous time step required more than 100 iterations. 
-The external method does not need the preconditioner to be remade, even when its moving, because each node always depends on the same things regardless of the position of the body. 
+Here, preconditioner is recalculated only if the solution of the previous time step required more than 100 iterations. 
+The external method does not need the preconditioner to be remade, even when the body is moving, because each node always depends on the same neighbors regardless of the position of the body. 
 
 
-\section{Grid Staggering}
+\section{Grid staggering}
 \label{Grid Staggering}
 
 A collocated grid stores all variable information at the center of each cell.
-When discretized on a collocated grid, Navier--Stokes will yield an odd-even decoupling of pressure an velocity resulting in a checkerboard pattern unless special steps are taken to prevent it. 
-Using a staggered grid is a relatively straightforward way to avoid odd-even decoupling.
-A staggered grid stores scalar values(pressure, temperature, density etc.) at the cell center and velocities at the cell face. 
-Staggered grids also have the advantage of not requiring a pressure boundary condition.
-cuIBM-FSI is staggered in the positive x and y directions. 
-That is, if the cell center is cell denoted as i as shown in Figure~\ref{fig:stagger}, the top and right faces are also denoted as i and the bottom and left faces are i-nx and i-1. 
-It is worth noting that Luo et al.\cite{Luo:2012gx} uses a collocated grid.
-Due to the sensitivity of immersed boundary methods near the body, this may cause some difference.
-There is no theoretical reason why the numerical suppression method should not work on a staggered grid.
+When discretized on a collocated grid, the Navier--Stokes equations will yield an odd-even decoupling of pressure and velocity resulting in a checkerboard pattern, unless special steps are taken to prevent it. 
+Using a staggered grid is a relatively straightforward way to avoid odd-even decoupling. 
+A staggered grid stores scalar values (pressure, temperature, density etc.) at the cell centers and velocities at the cell faces. 
+Staggered grids also have the advantage of not requiring a pressure boundary condition. 
+cuIBM-FSI is staggered in the positive $x$ and $y$ directions. 
+That is, if the cell center is denoted as $i$ as shown in Figure~\ref{fig:stagger}, the top and right faces are also denoted as $i$ and the bottom and left faces are $i-nx$ and $i-1$. 
+It is worth noting that Luo et al.~\cite{Luo:2012gx} uses a collocated grid. 
+Due to the sensitivity of IBMs\todo{change all IBM to immersed boundary method} near the body, this may cause some differences. 
+
 \begin{figure}[!htb]
 	\centering
 	\includestandalone[width=0.5\textwidth]{grid_stagger}
@@ -399,51 +398,52 @@ There is no theoretical reason why the numerical suppression method should not w
 \end{figure}
 
 \section{Node Identification}
-Nodes are identified using a ray tracing algorithm described in the book Computational Geometry in C by Joesph O'Rourke\cite{o1998computational}.
-The implementation is based of the CPU implementation from the original cuIBM\cite{krishnan2012validation}. 
-One thread is generated for each node, be it u, v or pressure and performs the following actions to find rays in the x direction.
-First the Lagrangian body nodes are looped through to make segments with their nearest neighbors.
-If to top of this segment is above the node and the bottom of the segment is below the node then the x location of the body at the height of the node is found(open circle in Figure~\ref{fig:node id 1}).
-The node is then tested for proximity to the body in the x direction. 
-To determine what the node is, five x-coordinates are used; $x_{i-1}$, $x_{i}$, $x_{i+1}$, $x_{BI}$ and $x_{body center}$. 
-Using Figure \ref{fig:node id 1} for example, the BI will text as being greater than the body center, greater than $x_{i-1}$ and less than $x_{i}$ which makes $u_{i,j}$ a hybrid node. 
+Nodes are identified using a ray-tracing algorithm described in O'Rourke~\cite{o1998computational}.
+The implementation is based on the CPU implementation of the original cuIBM~\cite{krishnan2012validation}. 
+One thread is generated for each node, be it $u$, $v$ or $p$ and this thread performs the following actions to find rays in the $x$ direction. 
+First, the Lagrangian body nodes are looped through to make segments with their nearest neighbors. 
+If the top of this segment is above the node and the bottom of the segment is below the node, then the $x$ location of the body at the height of the node is found (open circle in Figure~\ref{fig:node id 1}).
+The node is then tested for proximity to the body in the $x$ direction. 
+To determine what the node is, five $x$-coordinates are used: $x_{i-1}$, $x_{i}$, $x_{i+1}$, $x_{BI}$ and $x_{\text{body center}}$. 
+Using Figure \ref{fig:node id 1} for example, the body intercept will test as being greater than the body center, greater than $x_{i-1}$, and less than $x_{i}$, which makes $u_{i,j}$ a hybrid node. 
 
-It is possible for a hybrid or ghost node to be unable to find the body when searching in the x direction, i.e. if the node is above the highest body node.
-After the algorithm looks for intersections in the x direction it searches in the y direction.
-In the case where a node is able to find the body in both the x and y directions, the x direction is always chosen. 
-The v velocity and pressure nodes are found in the same way as described above, but use different coordinates.
+It is possible for a hybrid or ghost node to be unable to find the body when searching in the $x$ direction, e.g. if the node is above the highest body node. 
+After the algorithm looks for intersections in the $x$ direction, it searches in the $y$ direction. 
+In the case where a node is able to find the body in both the $x$ and $y$ directions, the $x$ direction is always chosen. 
+The $v$ velocity and pressure nodes are found in the same way as described above, but using different coordinates. 
 
 After all the points have been tagged, the solid nodes are set to an arbitrary value so they can be easily found later.
-This step is not critical for Navier--Stokes but is needed for the force calculation, which disregards everything inside the body, and can be convenient when visualizing the solution.
+This step is not critical for the solution of the Navier--Stokes equations, but is needed for the force calculation, which disregards everything inside the body, and can be convenient when visualizing the solution. 
 \begin{figure}
 	\centering
 	\includestandalone[width=0.5\textwidth]{node_id_1}
-	\caption{To find the hybrid and ghost nodes the position of the body must be translated from the Lagrangian body nodes to the Eulerian grid.}
+	\caption{To find the hybrid and ghost nodes the position of the body must be translated from the Lagrangian body nodes to the Eulerian grid. The solid line is the real body which is represented by the Lagrangian body nodes(solid circles). The dashed lines are drawn between the body nodes and represent the discretized body.}
 	\label{fig:node id 1}
 \end{figure}
 
-\section{Force Calculation}
+\section{Force calculation}
 \label{Force Calculation}
 
-The drag and lift on the body are calculated using the control volume approach detailed in Lai and Peskin\cite{lai2000immersed}.
-The implementation of this approach is largely the same as the original cuIBM. 
+The drag and lift on the body are calculated using the control volume approach detailed by Lai and Peskin~\cite{lai2000immersed}.
+The implementation of this approach is largely the same as the original cuIBM~\cite{layton2011cuibm}. 
 Lai and Peskin give Equation~\eqref{eq:force calculation} to calculate the drag force. 
 \begin{equation}\label{eq:force calculation}
-F_D=-\int_{\partial \Omega_0} \rho u_i\textbf{u}\cdot \textbf{n}ds- \int_{\partial \Omega_0}pn_ids+\int_{\partial \Omega_0}\mu \left(\frac{\partial u_i}{\partial x_j}+\frac{\partial u_j}{\partial x_i}\right)n_jds-\frac{\partial}{\partial t}\int_{\Omega_0}\rho u_i d\textbf{x}
+F_D=-\int_{\partial \Omega_0} \rho u_i(\textbf{u}\cdot \textbf{n})ds- \int_{\partial \Omega_0}pn_ids+\int_{\partial \Omega_0}\mu \left(\frac{\partial u_i}{\partial x_j}+\frac{\partial u_j}{\partial x_i}\right)n_jds-\frac{\partial}{\partial t}\int_{\Omega_0}\rho u_i dx
 \end{equation}
-$\Omega_0$ is any square sub-domain place around the body. 
-Once discretized, simplified, non-dimensionalized the terms can be rearranged into 3 groups, FxX, FxY and FxU. 
-The first term represents the forces in the x direction from the left and right of the control volume and is formed from the second and third integral in \eqref{eq:force calculation}. 
-FxY is the forces in the x direction from the top and bottom of the control volume.
+where $\Omega_0$ is any square sub-domain place around the body and $n_i$ and $n_j$ are the normal vectors in the $x$ and $y$ directions. 
+Once discretized, simplified and non-dimensionalized the terms can be rearranged into 3 groups, $F_{x,x}$, $F_{x,y}$ and $F_{x,u}$. 
+The first term, $F_{x,x}$, represents the forces in the $x$ direction from the left and right of the control volume and is formed from the second and third integral in Equation~\eqref{eq:force calculation}. 
+$F_{x,y}$ is the forces in the x direction from the top and bottom of the control volume. 
 It comes from the first and third integral. 
-The fourth integral becomes FxU, the x force from the unsteady term and includes everything inside of the control volume. 
-These terms are partialy discretized in equations \eqref{eq:force calculation 2}, \eqref{eq:force calculation 3} and \eqref{eq:force calculation 4}. 
+The fourth integral becomes $F_{x,u}$, the $x$ force from the unsteady term and includes everything inside of the control volume. 
+These terms are partially discretized in Equations \eqref{eq:force calculation 2}, \eqref{eq:force calculation 3}, and \eqref{eq:force calculation 4}. 
 \begin{align}
 FxX &=-\sum_{\Omega_y}\left((p_e-p_w)+(u_e^2-u_w^2)-\nu\left(\left.\frac{du}{dx}\right|_e-\left.\frac{dv}{dx}\right|_w\right)\right)dy\label{eq:force calculation 2}\\
-FxY &=-\sum_{\Omega_x}\left(0.5(u_nv_n-u_sv_s)-0.25\nu \left(\left.\frac{du}{dy}\right|_n+\left.\frac{dv}{dx}\right|_n-\left.\frac{du}{dy}\right|_s-\left.\frac{dv}{dx}\right|_s\right)\right)\label{eq:force calculation 3}\\
+FxY &=-\sum_{\Omega_x}\left(0.5(u_nv_n-u_sv_s)-0.25\nu \left(\left.\frac{du}{dy}\right|_n+\left.\frac{dv}{dx}\right|_n-\left.\frac{du}{dy}\right|_s-\left.\frac{dv}{dx}\right|_s\right)\right),\label{eq:force calculation 3}\\
 FxU &=\frac{u_i^{n+1}-u_i^{n}}{dt}0.5dydx\;\label{eq:force calculation 4}
 \end{align}
-The subscripts n,e,s,w represent the north, east, south and west faces of the sqaure domain $\Omega_0$.
+\todo{you are hereeeee}
+The subscripts $n$,$e$,$s$,$w$ represent the north, east, south and west faces of the sqaure domain $\Omega_0$.
 In practice, varying the size of $\Omega_0$ from L=4 to L=10 was not found to have a significant effect on the force or computation time.
 It was also found that the body didn't have to be at the center of the domain.
 Given this, the control volume is generally kept in the same location as the body moves around inside it.
@@ -1486,7 +1486,7 @@ cuIBM-FSI currently uses CUDA 7.5 and at the time of writing CUDA 8.0 is availab
 Other libraries are available that have more advanced multi-grid methods that may not suffer from the same scaling problems CUSP does. 
 In addition, CUSP does not support multiple GPUs, meaning that this code can't be used on a cluster. 
 
-\bibliographystyle{plain}
+\bibliographystyle{unsrt}
 \bibliography{thesis}
 
 \appendix
