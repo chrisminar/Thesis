@@ -442,72 +442,71 @@ FxX &=-\sum_{\Omega_y}\left((p_e-p_w)+(u_e^2-u_w^2)-\nu\left(\left.\frac{du}{dx}
 FxY &=-\sum_{\Omega_x}\left(0.5(u_nv_n-u_sv_s)-0.25\nu \left(\left.\frac{du}{dy}\right|_n+\left.\frac{dv}{dx}\right|_n-\left.\frac{du}{dy}\right|_s-\left.\frac{dv}{dx}\right|_s\right)\right),\label{eq:force calculation 3}\\
 FxU &=\frac{u_i^{n+1}-u_i^{n}}{dt}0.5dydx\;\label{eq:force calculation 4}
 \end{align}
-\todo{you are hereeeee}
-The subscripts $n$,$e$,$s$,$w$ represent the north, east, south and west faces of the sqaure domain $\Omega_0$.
-In practice, varying the size of $\Omega_0$ from L=4 to L=10 was not found to have a significant effect on the force or computation time.
-It was also found that the body didn't have to be at the center of the domain.
+The subscripts $n$,$e$,$s$,$w$ represent the north, east, south and west faces of the sqaure domain $\Omega_0$, respectively.
+In practice, varying the size of $\Omega_0$ from $L=4$ to $L=10$ was not found to have a significant effect on the force or computation time.
+The body did not have to be at the exact center of the domain.
 Given this, the control volume is generally kept in the same location as the body moves around inside it.
-We typically used a square with sides L=10 for a body of size D=1 that moves about 1D away from center.
+Typically a square with sides $L=10$ is used for a body of size $D=1$ that moves about $D$ away from center.
 
-Depending on how the ghost and solid nodes are handled Equation \eqref{eq:force calculation} can predict force very poorly.
-To circumvent this effect over multiple solvers all nodes inside the body are excluded from the unsteady term.
+If the solid and ghost nodes are not at steady state, Equation \eqref{eq:force calculation} will predict force poorly. 
+To circumvent this effect over multiple solvers, all nodes inside the body are excluded from the unsteady term. 
 
 \section{Linear Algebra}
 \label{Preconditioning and Linear Algebra Solvers}
-CUSP(cuda sparse) is the linear algebra library used by cuIBM-FSI. 
-CUSP can handle many different types of sparse data structures and has several different solvers built in. 
-cuIBM-FSI uses a bi-conjugate gradient stabilized(BiCGSTAB) method for both the intermediate velocity and Poisson equation. 
+CUSP(CUDA sparse) is the linear algebra library used by cuIBM-FSI. \todo{refernce for cuibmfsi}
+CUSP can handle many different types of sparse data structures and has several solvers. 
+cuIBM-FSI uses a bi-conjugate gradient stabilized (BiCGSTAB) method for both the intermediate velocity and Poisson equation. 
 Preconditioners are used to improve performance. 
 A diagonal preconditioner is used for the intermediate velocity and a smoothed aggregation for the pressure step. 
-Smoothed aggregation is a type of multi-grid approach to linear algebra that can drastically speed it up. 
-In a multi-grid method, several iterations of BiCGSTAB(or any convergence method) are done on the full grid, then the solution is transfered to a coarser grid. 
-This process is repeated until the grid is very coarse and then the solution is rebuilt on finer and finer grids until a solution has been obtained for the full grid. 
-Getting an approximation to the matrix's inverse using the coarser grids saves computational time. 
-\section{Navier--Stokes}
+Smoothed aggregation is a type of multi-grid approach to linear algebra that can drastically speed up convergence. 
+In a multi-grid method, several iterations of BiCGSTAB (or any convergence method) are done on the full grid, then the solution is transfered to a coarser grid. 
+This process is repeated until the grid is very coarse and then the solution is rebuilt on increasingly finer grids until a solution has been obtained for the full grid. 
+Approximating the inverse of the matrix using the coarser grids saves computational time. \todo{need refernces}
+\section{Navier--Stokes equations}
 \label{ID:Navier Stokes}
 
-The 2D incompressible Navier--Stokes equation forms the backbone of the immersed boundary method. 
-To solve Navier--Stokes, the fractional step method is used. 
-In the first step, Equation~\eqref{eq:Incompressible NavierStokes} drops the pressure term and is discretized to get an intermediate velocity. 
+The 2D, incompressible Navier--Stokes equations form the backbone of the immersed boundary method. 
+The fractional step method is used to solve these equations. 
+In the first step, Equation~\eqref{eq:Incompressible NavierStokes} drops the pressure term and is discretized to get an intermediate velocity~\cite{Perot1993}: 
 \begin{equation}
 \frac{\partial \textbf{u}}{\partial t} + \nabla ( \textbf{uu} ) = -\nabla p + \nu\nabla^{2}\textbf{u} \label{eq:Incompressible NavierStokes}
 \end{equation}
 In the second sub step, Equation~\eqref{eq:Poisson} is solved for pressure. 
 In the third sub step, the final velocity is updated. 
 This section goes over the discretization details of using fractional step for normal Navier--Stokes. 
-Sections~\ref{sec:ID fadlun}, \ref{sec:ID external} and \ref{sec:ID embedded} cover the modifications required for the presence of an immersed boundary with the modified Fadlun, external and embedded methods. 
+Sections~\ref{sec:ID fadlun}, \ref{sec:ID external}, and \ref{sec:ID embedded} cover the modifications required for the presence of an immersed boundary with the modified Fadlun, external, and embedded methods. 
 
-\subsection{Intermediate Velocity}
+\subsection{Intermediate velocity}
 \label{sec:ID NS intermediate velocity}
 
-The advection term, $\nabla (\textbf{uu})$, is discretized in time using explicit, second-order Adams-Bashforth. 
-Diffusion, $\nu \nabla^2 \textbf{u}$, is discretized using Crank-Nicolson. 
-The result is an expanded form of Equation\eqref{eq:Intermediate Velocity}, Equation~\eqref{eq:Expanded Intermediate Velocity}. 
+The advection term, $\nabla (\textbf{uu})$, is discretized in time using explicit, second-order Adams--Bashforth. 
+The diffusion, $\nu \nabla^2 \textbf{u}$, is discretized using Crank--Nicolson. 
+The result is an expanded form of Equation~\eqref{eq:Intermediate Velocity}, Equation~\eqref{eq:Expanded Intermediate Velocity}: 
 \begin{equation}
 \label{eq:Expanded Intermediate Velocity}
-\hat{\textbf{u}} - \frac{\Delta t}{2}L(\hat{\textbf{u}}) = \textbf{u}^n + \Delta t\left(0.5L(\textbf{u}^n) - 1.5N(\textbf{u}^n) + 0.5N(\textbf{u}^{n-1}) + BC\right)
+\hat{\textbf{u}} - \frac{\Delta t}{2}L(\hat{\textbf{u}}) = \textbf{u}^n + \Delta t\left(0.5L(\textbf{u}^n) - 1.5N(\textbf{u}^n) + 0.5N(\textbf{u}^{n-1}) + BC\right),
 \end{equation}
-Where $N$ is the advection operator, $L$ is the diffusion Laplacian operator and $BC$ is the boundary condition term which is the leftovers from applying the Laplacian to $\hat{\textbf{u}}$. 
-Each term, N, L, BC, LHS, is described in its own section below. 
+where $N$ is the advection operator, $L$ is the diffusion Laplacian operator, and $BC$ is the boundary condition term (the leftover terms from applying the Laplacian to $\hat{\textbf{u}}$). 
+Each term ($N$, $L$, $BC$ and $LHS$) is described in its own section below. 
 
-\subsubsection{Advection}
+\subsubsection{Advection terms}
 \label{sed:ID NS Advection}
-The advection term, $\nabla (\textbf{uu})$, expands to become Equations~\eqref{eq: Advection 1} and~\eqref{eq: Advection 2} which are in the x-momentum and y-momentum equations, respectively. 
-Due to the staggered grid, the discretization of Equations~\eqref{eq: Advection 1} and~\eqref{eq: Advection 2} are slightly different but for brevity only the discretization of x-momentum will be shown. 
+The advection term, $\nabla (\textbf{uu})$, expands to become Equations~\eqref{eq: Advection 1} and~\eqref{eq: Advection 2}, which are in the $x$-momentum and $y$-momentum equations, respectively. 
+Due to the staggered grid, the discretizations of Equations~\eqref{eq: Advection 1} and~\eqref{eq: Advection 2} are slightly different, but for brevity only the discretization of $x$-momentum will be shown. 
 Note that $u$ and $v$ represent scalar velocities but $\textbf{u}$ is a vector. 
 \begin{align}
 &u\frac{\partial u}{\partial x} + v\frac{\partial u}{\partial y} \label{eq: Advection 1} \\ 
 &u\frac{\partial v}{\partial x} + v\frac{\partial v}{\partial y} \; \label{eq: Advection 2}
 \end{align}
-Discretizing \eqref{eq: Advection 1} on a uniform grid using second order central differencing results in Equation~\eqref{eq: discretized uniform advection}. 
+Discretizing Equation~\eqref{eq: Advection 1} on a uniform grid using second order central differences results in Equation~\eqref{eq: discretized uniform advection}. 
+\begin{align}
+u\frac{\partial u}{\partial x} + v\frac{\partial u}{\partial y} = u_{i,j}\frac{u_{i+1,j} - u_{i-1,j}}{2dx} &+ \frac{v_{i,j} + v_{i+1,j} + v_{i,j-1} + v_{i+1,j-1}}{4}\frac{u_{i,j+1} - u_{i,j-1}}{2dy}, \label{eq: discretized uniform advection}\\
+\left.\frac{du}{dx}\right|_i&\approx\left.\frac{du}{dx}\right|_1 + \frac{\left.\frac{du}{dx}\right|_2 - \left.\frac{du}{dx}\right|_1}{0.5(dx_i + dx_{i+1})}0.5dx_i\; \label{eq: discretized nonuniform advection} 
+\end{align}
 Figure~\ref{fig:discretized uniform advection}a shows a section of uniform grid for reference with Equation~\eqref{eq: discretized uniform advection}. 
 A non-uniform grid requires a more involved discretization, shown in \eqref{eq: discretized nonuniform advection} and \eqref{eq:bili 3}. 
 If $\Delta x_{i+1}$ does not equal $\Delta x$ then $\frac{\partial u}{\partial x}$ must be calculated at the cell centers, indicated by the open circles marked $1$ and $2$ in Figure~\ref{fig:discretized uniform advection}b, then interpolated to $u_{i,j}$. 
 
-\begin{align}
-u_{i,j}\frac{u_{i+1,j} - u_{i-1,j}}{2dx} &+ \frac{v_{i,j} + v_{i+1,j} + v_{i,j-1} + v_{i+1,j-1}}{4}\frac{u_{i,j+1} - u_{i,j-1}}{2dy} \label{eq: discretized uniform advection}\\
-\left.\frac{du}{dx}\right|_i&=\left.\frac{du}{dx}\right|_1 + \frac{\left.\frac{du}{dx}\right|_2 - \left.\frac{du}{dx}\right|_1}{0.5(dx_i + dx_{i+1})}0.5dx_i\; \label{eq: discretized nonuniform advection} 
-\end{align}
 \begin{figure}[!htb]
 	\centering
 	\begin{subfigure}{0.4\textwidth}
@@ -519,73 +518,73 @@ u_{i,j}\frac{u_{i+1,j} - u_{i-1,j}}{2dx} &+ \frac{v_{i,j} + v_{i+1,j} + v_{i,j-1
 		\includestandalone[width=\linewidth]{advection_non-uniform}
 		\caption{A non-uniform grid reference to be used with Equation~\eqref{eq: discretized nonuniform advection}}
 	\end{subfigure}
-	\caption{Drag force verses time for two solvers compared to Koumoutsakos and Leonard for flow over an impulsively started cylinder.}
+	\caption{Reference grids used in conjunction with Equations~\eqref{eq: discretized uniform advection} and \eqref{eq: discretized nonuniform advection}}
 	\label{fig:discretized uniform advection}
 \end{figure}
 
 In addition, $v$ must be bilinearly interpolated for at $u_{i,j}$ on a non-uniform grid.
 Figure~\ref{fig:bi-linear-interpolation} shows a schematic of bilinear interpolation.
 First, $v$ at 1 and 2 are linearly interpolated for using Equations \eqref{eq:bili 1} and \eqref{eq:bili 2}. 
-Then $v_1$ and $v_2$ are used to linearly interpolated for $v$ at $u_{i,j}$ using Equation \eqref{eq:bili 3}. 
-The dashed lines in Figure~\ref{fig:bi-linear-interpolation} are just reference lines and not indicative of cell faces. 
+Then, $v_1$ and $v_2$ are used to linearly interpolate for $v$ at $u_{i,j}$ using Equation \eqref{eq:bili 3}.
 \begin{align}
 v_1 &\approx \frac{x_2 - x}{x_2 - x_1}v_{i,j} + \frac{x - x_1}{x_2 - x_1}v_{i+1,j} \label{eq:bili 1} \\
 v_2 &\approx \frac{x_2 - x}{x_2 - x_1}v_{i,j-1} + \frac{x - x_1}{x_2 - x_1}v_{i+1,j-1} \label{eq:bili 2} \\
 v_x &\approx \frac{y_2 - y}{y_2 - y_1}v_{1} + \frac{y - y_1}{y_2 - y_1}v_{2} \; \label{eq:bili 3}
 \end{align}
-\begin{figure}[htb]
+\begin{figure}[!htb]
 	\centering
 	\includestandalone[width=0.5\textwidth]{bi-linear_interpolation}
-	\caption{Non-uniform bi linear interpolation.}
+	\caption{Non-uniform bi linear interpolation. The dashed lines are reference lines and not indicative of cell faces.}
 	\label{fig:bi-linear-interpolation}
 \end{figure}
 
-\subsubsection{Diffusion}
+\subsubsection{Diffusion terms}
 \label{sec:NS ID Diffusion}
-The diffusion term, $\nu \nabla^2 \textbf{u}$, expands to become Equations \eqref{eq:ID Diffusion x} and \eqref{eq:ID Diffusion y} for the x and y momentum equations, respectively.
+The diffusion term, $\nu \nabla^2 \textbf{u}$, expands to become Equations \eqref{eq:ID Diffusion x} and \eqref{eq:ID Diffusion y} for the $x$ and $y$ momentum equations, respectively:
 \begin{align}
 & \frac{1}{Re}\left(\frac{\partial^2 u}{\partial x^2} + \frac{\partial^2 u}{\partial y^2}\right)\label{eq:ID Diffusion x} \\
 & \frac{1}{Re}\left(\frac{\partial^2 v}{\partial x^2} + \frac{\partial^2 v}{\partial y^2}\right)\; \label{eq:ID Diffusion y}
 \end{align}
-$\nu$ can be simplified to 1 over the Reynolds number so long as the characteristic velocity is 1. 
-As with advection, the discretization for \eqref{eq:ID Diffusion x} and \eqref{eq:ID Diffusion y} are different because they are computed at the u and v nodes.
+where $\nu$ can be simplified to the inverse of Reynolds number(Re) as long as the characteristic velocity is one. 
+As with advection, the discretizations for Equations \eqref{eq:ID Diffusion x} and \eqref{eq:ID Diffusion y} are different because they are computed at the $u$ and $v$ nodes. 
 The discretization is also more complex when done on a non-uniform grid.
-Equation \eqref{eq:ID Diffusion x} becomes \eqref{eq:ID Diffusion 1} when discretized over a uniform grid. 
-\begin{align}
-&\frac{u_{i+1,j} + u_{i-1,j} + u_{i,j+1} + u_{i,j-1} - 4u_{i,j}}{\Delta^2}\label{eq:ID Diffusion 1} \\
-&\frac{u_{i+1,j} - u_{i,j}}{dx_{i+1}(dx_{i+1}+dx_i)0.5} + \frac{u_{i-1,j} - u_{i,j}}{dx_{i}(dx_{i+1}+dx_i)0.5} \; \label{eq:ID Diffusion 2}
-\end{align}
+Equation \eqref{eq:ID Diffusion x} becomes \eqref{eq:ID Diffusion 1} when discretized over a uniform grid: 
+\begin{equation}
+\frac{\partial^2 u}{\partial x^2} + \frac{\partial^2 u}{\partial y^2}\approx\frac{u_{i+1,j} + u_{i-1,j} + u_{i,j+1} + u_{i,j-1} - 4u_{i,j}}{\Delta^2}\label{eq:ID Diffusion 1}
+\end{equation}
 \begin{figure}[!htb]
 	\centering
 	\includestandalone[width=0.5\textwidth]{Diffusion_discretization}
 	\caption{Non-uniform discretization example of the diffusion term.}
 	\label{fig:ID diffusion}
 \end{figure}
-To discretize over a non-uniform grid like that of Figure \ref{fig:ID diffusion} the terms in Equation \eqref{eq:ID Diffusion x} are expanded. 
-For example $\frac{\partial^2 u}{\partial x^2}$ will become $\frac{\partial}{\partial x}\left(\frac{\partial u}{\partial x}\right)$. 
+To discretize over a non-uniform grid like that of Figure \ref{fig:ID diffusion}, the terms in Equation \eqref{eq:ID Diffusion x} are expanded. 
+For example, $\frac{\partial^2 u}{\partial x^2}$ will become $\frac{\partial}{\partial x}\left(\frac{\partial u}{\partial x}\right)$. 
 The partial derivative of $u$ with respect to $x$ is calculated at the cell centers adjacent to $u_{i,j}$ and the partial derivative of that is taken with respect to $x$ at $u_{i,j}.$
-Only the discretization of $\frac{\partial^2 u}{\partial x^2}$ is show in Equation \eqref{eq:ID Diffusion 2}. 
+Only the discretization of $\frac{\partial^2 u}{\partial x^2}$ is shown in Equation \eqref{eq:ID Diffusion 2}. 
 Non-uniform discretization of $\frac{\partial^2 u}{\partial y^2}$ follows the same pattern. 
-
-\subsubsection{Boundary Terms}
+\begin{equation}
+\frac{\partial^2 u}{\partial x^2}\approx\frac{u_{i+1,j} - u_{i,j}}{dx_{i+1}(dx_{i+1}+dx_i)0.5} + \frac{u_{i-1,j} - u_{i,j}}{dx_{i}(dx_{i+1}+dx_i)0.5}  \label{eq:ID Diffusion 2}
+\end{equation}
+\subsubsection{Boundary terms}
 \label{sec:ID NS boundary}
-Special treatment of the advection and diffusion terms is required at the boundary. 
-Problems encountered at the boundary will be discussed using the discretization of the advection and diffusion terms from the u-momentum equation, Equations~\eqref{eq: Advection 1} and \eqref{eq:ID Diffusion x}.
-Figure~\ref{fig:ID iv bc} shows the grid relevant to discretization at the north east corner. 
+Special treatment of the advection and diffusion terms is required at the boundaries. 
+Problems encountered at the boundary will be discussed using the discretization of the advection and diffusion terms from the $u$-momentum equation, Equations~\eqref{eq: Advection 1} and \eqref{eq:ID Diffusion x}.
+Figure~\ref{fig:ID iv bc} shows the grid relevant to discretization at the north-east corner. 
 The problems associated with being at the domain's edge are all based on trying to access values that are out of bounds. 
 This issue pops up with several flavors. 
-The first is trying to access a velocity value that is on the boundary edge. 
-An example: if $\frac{\partial u}{\partial x}$ is calculated at $u_{i,j}$ using the standard second order central differencing $u_{i+1,j}$ is required but it's outside the domain. 
+The first is trying to access a velocity value on the boundary edge. 
+For example, if $\frac{\partial u}{\partial x}$ is calculated at $u_{i,j}$ using the standard second-order central differencing, $u_{i+1,j}$ is required but it's outside the domain. 
 The solver uses Dirichlet and convective velocity boundary conditions. 
-If an edge uses a convective boundary condition, that velocity gets calculated before the time step starts so that the rest of the solver can treat it as a Dirichlet boundary condition. 
+If an edge uses a convective boundary condition, that velocity gets calculated before the time step starts, so that the rest of the solver can treat it as a Dirichlet boundary condition. 
 When the solver encounters a value it needs on the boundary edge, it pulls a velocity value for that edge from a separate array. 
 
 Boundary arrays store values at the edge of the domain. 
-The second type of issue occurs when the required velocity value is outside of the boundary. 
-For example if $\frac{\partial^2 u}{\partial y^2}$ from the diffusion term is calculated at $u_{i,j}$ it needs a value from $u_{i,j+1}$, which is outside the boundary. 
+The second type of issue occurs when the required velocity value is outside the boundary. 
+For example if $\frac{\partial^2 u}{\partial y^2}$ from the diffusion term is calculated at $u_{i,j}$, it needs a value from $u_{i,j+1}$, which is outside the boundary. 
 Outlying velocities are approximated by assuming the derivative of velocity is constant at the boundary. 
 The linear extrapolation in Equation~\eqref{eq:bc extrapolation} simplifies to \eqref{eq:bc extrapolation simplified}, a relation for the outlying velocity in terms of known values. 
-Uniform and stretching grids both place the outlying node $0.5dx$ or $0.5dy$ away from the domain edge to make \eqref{eq:bc extrapolation} true. 
+Uniform and stretching grids both place the outlying node $0.5dx$ or $0.5dy$ away from the domain edge to satisfy Equation \eqref{eq:bc extrapolation}. 
 
 \begin{align}
 u_{bc} &= \frac{u_{i,j+1} - u_{i,j}}{dy_j}0.5dy_j+ u_{i,j} \label{eq:bc extrapolation} \\
@@ -595,38 +594,38 @@ u_{i,j+1} &= 2u_{bc} - u_{i,j} \; \label{eq:bc extrapolation simplified}
 \begin{figure}[!htb]
 	\centering
 	\includestandalone[width=0.5\textwidth]{bc_discretization}
-	\caption{North-East Boundary Condition Discretization.}
+	\caption{North-east boundary condition discretization.}
 	\label{fig:ID iv bc}
 \end{figure}
 
-\subsubsection{Left Side Matrix}
+\subsubsection{Left-hand side matrix}
 \label{sec:ID NS lhs}
-The left hand side of the intermediate velocity Equation \eqref{eq:Intermediate Velocity} is restated here for reference.
+The left hand side of the intermediate velocity Equation \eqref{eq:Intermediate Velocity} is restated here for reference:
 \begin{equation}
 \hat{\textbf{u}} - \frac{\Delta t}{2}L(\hat{\textbf{u}})
 \end{equation}
-The discretization of the Laplacian term is the same as described in the diffusion section, \ref{sec:NS ID Diffusion}. 
+The discretization of the Laplacian term is the same as described in the diffusion Section, ()\ref{sec:NS ID Diffusion}). 
 Boundary terms are approximated by assuming $\hat{\textbf{u}}=u$. 
-All the boundary terms become knowns using this assumption so they are moved to the right side of the equation. 
-Because both the $u$ and $v$ velocities are stored in the same array, the left side matrix will be size $\left((nx-1)ny + (ny-1)nx\right)^2$. 
-nx and ny represent the number of cells in the x and y directions, respectively.
-The "-1" is a bi-product of the grid staggering. 
+All the boundary terms become known values using this assumption, so they are moved to the right side of the equation. 
+Because both the $u$ and $v$ velocities are stored in the same array, the left-hand side matrix will be size $\left((n_x-1)n_y + (n_y-1)n_x\right)^2$. 
+$n_x$ and $n_y$ represent the number of cells in the $x$ and $y$ directions, respectively.
+The negative one is a bi-product of staggering the grid. 
 Each row in the matrix corresponds to one velocity node. 
-Most of the rows will have five non-zero columns, one for the neighboring node, north, east, south and west and one for center node. 
-Rows that represent a velocity node on the edge of the domain will only have four non-zero columns and rows that represent a corner velocity will only have three. 
+Most of the rows will have five non-zero columns: one for the neighboring nodes to the north, east, south and west and one for the center node. 
+Rows that represent a velocity node on the edge of the domain will only have four non-zero columns, and rows that represent a corner velocity will only have three. 
 
-\subsection{Poisson}
+\subsection{Poisson equation}
 \label{sec:ID NS poisson}
 The Poisson equation is the most computationally intensive step, typically taking more than 90\% of the total run time.
 If Equation \eqref{eq:Poisson} is discretized, a pressure boundary condition is needed.
 Instead, the velocity reconstruction equation, \eqref{eq:Projection}, and the continuity equation, \eqref{eq:Continuity}, are combined.
-At a non boundary node the two equations simplify to become the Poisson equation.
+At a non-boundary node the two equations simplify to become the Poisson equation.
 When at a boundary, the segment that would use a pressure term outside the domain is replaced by $u^{n+1}$, eliminating the need for a pressure boundary condition.
 
 The discretized continuity equation \eqref{eq:discretized continuity} is shown alongside a discretized velocity reconstruction for $\hat{u}_{i+1,j}$, Equation \eqref{eq:discretized projection}. 
 The other velocities used in the continuity equation are discretized in the same way. 
 In the reference Figure \ref{fig:ID poisson}, $u_{i,j}^{n+1}$ is not substituted for.
-Instead, the Dirichlet boundary condition velocity is used.
+Instead, the Dirichlet boundary condition velocity is used:
 \begin{align}
 \frac{u_{i,j}^{n+1} - u_{i-1,j}^{n+1}}{dx_i} + \frac{v_{i,j}^{n+1} - v_{i,j-1}^{n+1}}{dy_i} = 0 \label{eq:discretized continuity} \\
 u_{i,j}^{n+1} = \hat{u} - \frac{p_{i+1,j}^{n+1} - p_{i,j}^{n+1}}{dx_i + dx_{i+1}}2\Delta t \; \label{eq:discretized projection}
@@ -638,27 +637,27 @@ u_{i,j}^{n+1} = \hat{u} - \frac{p_{i+1,j}^{n+1} - p_{i,j}^{n+1}}{dx_i + dx_{i+1}
 	\label{fig:ID poisson}
 \end{figure}
 
-\section{Modified Fadlun Immersed Boundary Method}
+\section{Modified fadlun immersed boundary method}
 \label{sec:ID fadlun}
 \label{sec:modified fadlun}
 When at an immersed body, the Navier--Stokes equation needs some additional treatment to correctly represent a body. 
-This section will detail the implementation of the modified Fadlun et al\cite{Fadlun:2000fl}. approach to dealing with an immersed boundary.
+This section will detail the implementation of my modified Fadlun et al. \cite{Fadlun:2000fl} approach to dealing with an immersed boundary.
 
-\subsection{Intermediate Velocity}
+\subsection{Intermediate velocity}
 \label{sec:ID fadlun intermediate velocity}
-The interpolation that enforces the no slip condition happens in the intermediate velocity step. 
-To solve for intermediate velocity, the right hand side is first computed like there was no body as shown in section \ref{sec:ID NS intermediate velocity}. 
+The interpolation that enforces the no-slip condition happens in the intermediate velocity step. 
+To solve for intermediate velocity, the right hand side is first computed as for no body as described in Section \ref{sec:ID NS intermediate velocity}. 
 Then, the hybrid nodes are replaced with interpolation values. 
 Equation~\eqref{eq:ID intermediate velocity interpolation} gives an example interpolation that corresponds to Figure~\ref{fig:ID linear interpolation}. 
-The coefficients inside the brackets are the values that will be placed in the left hand side matrix and the term on the right side of the equation will replace the value from \ref{eq:Expanded Intermediate Velocity}. 
-The first term can be any of the hybrid node's neighbors and is determined by the location of the body. 
 \begin{equation}
-\left[1\right]u_{i+1,j} + \left[-\frac{b}{a}\right]u_{i,j} = \left(1-\frac{b}{a}\right)u_{body}
+\left[1\right]u_{i+1,j} + \left[-\frac{b}{a}\right]u_{i,j} = \left(1-\frac{b}{a}\right)u_{\text{body}}
 \label{eq:ID intermediate velocity interpolation}
 \end{equation}
-The direction of interpolation is chosen by the point identification algorithm before the time step. 
-As a rule of thumb, the interpolation will be along the x direction if the body's tangent line is vertical and be along the y direction if the tangent line is horizontal. 
-The algorithm prefers to interpolate along the x direction, it only interpolates along y if it can't interpolate along the x. 
+The coefficients inside the brackets are the values that will be placed in the left-hand side matrix and the term on the right side of the equation will replace the value from Equation~\eqref{eq:Expanded Intermediate Velocity}. 
+The first term can be any of the hybrid node's neighbors and is determined by the location of the body. 
+The direction of interpolation is chosen by the point-identification algorithm before the time step. 
+As a rule of thumb, the interpolation will be along the $x$ direction if the body's tangent line is vertical and be along the $y$ direction if the tangent line is horizontal. 
+The algorithm prefers to interpolate along the $x$ direction; it only interpolates along $y$ if it can not interpolate along the $x$. 
 Figure \ref{fig:ID linear interpolation} shows an example of the linear interpolation at the boundary. 
 Equation \eqref{eq:ID intermediate velocity interpolation} shows the interpolation reworked to fit into established matrices used to solve for intermediate velocity. 
 The terms inside the brackets represent the left side matrix. 
@@ -672,54 +671,53 @@ Instead of creating the left side matrix for Navier--Stokes then editing it for 
 	\label{fig:ID linear interpolation}
 \end{figure}
 
-\subsection{Poisson}
+\subsection{Poisson equation}
 \label{sec:ID fadlun poisson}
-Fadlun et al. does not modify the Poisson equation. 
-When testing the Fadlun et al. method with an impulsively started cylinder we found that it failed to accurately predict the drag in the transient region. 
-By modifying the intermediate velocity at the boundary without compensating for it the continuity equation is not satisfied. 
-Having a mass source or sink at each hybrid node drastically effects the accuracy and stability. 
-cuIBM-FSI handles this problem by adding a treatment to the Poisson equation in a manner akin to a sharp interface method. 
+Fadlun et al.~\cite{Fadlun:2000fl} did not modify the Poisson equation. 
+When testing their method with an impulsively started cylinder, I found that it failed to accurately predict drag in the transient regime. 
+By modifying the intermediate velocity at the boundary without compensating, the continuity equation is not satisfied. 
+Having a mass source or sink at each hybrid node drastically affects the accuracy and stability. 
+My modification to the Fadlun method handles this problem by adding a treatment to the Poisson equation in a manner akin to a sharp interface method. \todo{cite}
 At a hybrid node, if any term from Equation~\eqref{eq:discretized projection} is inside the boundary it is assumed that $u_{i,j}^{n+1}$ is close enough to the body to approximate it as the body velocity. 
-If the body passes through the cell, $dx_i$ and or $dy_j$ from Equation \eqref{eq:discretized continuity} are shortened to appropriately measure the new cell size. 
+If the body passes through the cell, $dx_i$ and/or $dy_j$ from Equation \eqref{eq:discretized continuity} are decreased to appropriately measure the new cell size. 
 
 \section{Luo Immersed Boundary Method}
 \label{sec:ID luo}
-cuIBM-FSI has two methods based off the work of Luo et al\cite{Luo:2012gx}. 
+cuIBM-FSI has two methods based off the approach given by Luo et al~\cite{Luo:2012gx}. 
 Luo et al. extrapolates values to ghost nodes an interpolates values at hybrid nodes.
-They do not describe exactly where all this interpolating and extrapolating takes place. 
-It is a bit confusing where and when values should be extrapolated and interpolated.
-We tried doing it two ways.
-The key difference between them is when the extrapolation and interpolation takes place.
-The 'external' method moves the interpolation and extrapolation outside of the linear algebra.
-Separating the extrapolation, interpolation and linear algebra steps causes each one to not have access to the most updated information when being calculated because they all depend on each other.
+They left out details describing exactly where all this interpolating and extrapolating takes place. 
+I tried doing it two ways. 
+The key difference between the two approaches is when the extrapolation and interpolation takes place. 
+The `external' method moves the interpolation and extrapolation outside of the linear algebra. 
+Separating the extrapolation, interpolation, and linear algebra steps causes each one to not have access to the most updated information when being calculated because they all depend on each other. 
 Simplifying the linear algebra this way reduces the computational time at the cost of reduced accuracy and increased numerical oscillation. 
 
-The 'embedded' method more closely follows the work of Luo et al. which seems to perform  interpolations, extrapolations and weighting inside of the linear algebra solutions for the intermediate velocity and pressure. 
+The `embedded' method performs  interpolations, extrapolations, and weighting inside of the linear algebra solutions for the intermediate velocity and pressure. 
 All of the extrapolation and interpolation happens inside of the linear algebra steps.
 Field values will solved by plugging Equations~\eqref{eq:Intermediate Velocity} or \eqref{eq:Poisson} and \eqref{eq:Interpolation} into Equation~\eqref{eq:Weight}. 
 The discretization of these can be seen in section \ref{sec:ID embedded}. 
 
-Two key implementation details distinguish cuIBM-FSI from Luo et al. 
-Firstly, Luo et al. does not use a staggered grid. 
-Secondly, Luo et al. uses Crank-Nicholson to discretize both the advection and diffusion terms. 
+Two key implementation details distinguish cuIBM-FSI from Luo et al.~\cite{Luo:2012gx}. 
+Firstly, Luo et al. did not use a staggered grid. 
+Secondly, Luo et al. used Crank--Nicholson to discretize both the advection and diffusion terms, whereas cuIBM-FSI uses Adams--Bashforth for the advection terms. 
 
-\subsection{External Interpolation}
+\subsection{External interpolation method}
 \label{sec:ID external}
-The external interpolation method tries to resolve the time step in a non-iterative manner by calculating the interpolations, extrapolations and weighting outside of the linear algebra. 
-Before a value is used by fractional step, it is calculated at the hybrid and ghost nodes. 
-For example, the equation for intermediate velocity,\eqref{eq:Intermediate Velocity}, depends on the velocity field so $u$ and $v$ are interpolated for at the hybrid nodes and extrapolated for at the ghost nodes before the right hand side matrix is calculated. 
-The following sequence is setup such that a value is interpolated or extrapolated just before it is needed for the subsequent step. 
+The external interpolation method tries to resolve the time step in a non-iterative manner by calculating the interpolations, extrapolations and weighting outside of the linear algebra procedures. 
+Before a value is used by the fractional-step calculations, it is calculated at the hybrid and ghost nodes. 
+For example, the equation for intermediate velocity, Equations~\eqref{eq:Intermediate Velocity}, depends on the velocity field, so $u$ and $v$ are interpolated for at the hybrid nodes and extrapolated for at the ghost nodes before the right-hand side matrix is calculated. 
+The following sequence is set up such that a value is interpolated or extrapolated just before it is needed for the subsequent step:
 
 
 \begin{enumerate}
 	\item Identify all nodes as hybrid, ghost, fluid or solid. 
-	\item Extrapolate u and v velocity values to ghost nodes. 
-	\item Interpolate for u and v velocities at hybrid nodes. 
-	\item Calculate right hand side for the intermediate velocity solution. 
+	\item Extrapolate $u$ and $v$ velocity values to ghost nodes. 
+	\item Interpolate for $u$ and $v$ velocities at hybrid nodes. 
+	\item Calculate the right-hand side terms for the intermediate velocity solution. 
 	\item Solve for intermediate velocity. 
 	\item Weight the two intermediate velocity solutions. 
 	\item Extrapolate intermediate velocities to ghost nodes. 
-	\item Calculate right hand side for the Poisson equation. 
+	\item Calculate the right-hand side terms for the Poisson equation. 
 	\item Solve the Poisson equation. 
 	\item Interpolate for pressure at hybrid nodes. 
 	\item Weight the two pressure solutions. 
@@ -728,23 +726,23 @@ The following sequence is setup such that a value is interpolated or extrapolate
 	\item Advance time. 
 \end{enumerate}
 
-\subsection{Embedded Interpolation}
+\subsection{Embedded interpolation method}
 \label{sec:ID embedded}
-In the embedded interpolation version, the Navier--Stokes and interpolated solutions for field values are calculated and weighted inside each linear algebra solver. 
+In the embedded interpolation method, the Navier--Stokes and interpolated solutions for field values are calculated and weighted inside each linear-algebra solver. 
 In the intermediate velocity substep, the right hand side terms are first calculated as if no body was present. 
-The weighting coefficients and some of the interpolation can be calculated prior to the linear algebra because they are only dependent on the geometry, not the velocity or pressure. 
-The equations for bi-linear interpolation, \eqref{eq:Interpolation}, and interpolating to the ghost node, \eqref{eq:Velocity Interpolation} or \eqref{eq:Pressure Interpolation} are combined and rearranged split into field value terms and everything else. 
+The weighting coefficients and part of the interpolation can be calculated prior to the linear algebra because they are only dependent on the geometry, not the velocity or pressure. 
+The equations for bi-linear interpolation, Equation \eqref{eq:Interpolation}, and interpolating to the ghost node, Equations \eqref{eq:Velocity Interpolation} or \eqref{eq:Pressure Interpolation}, are combined then rearranged to separate field value terms. 
 A similar operation happens for the hybrid nodes. 
-To illustrate the process of separating these variables, $u$ is plugged in for $\phi$ in Equation~\eqref{eq:ID reorganized interpolation}. 
+To illustrate the process of separating these variables, $u$ is plugged in for $\phi$ in Equation~\eqref{eq:ID reorganized interpolation}:
 \begin{equation}
 u(x,y) = a_0 + a_1x +a_2y+a_3xy
 \end{equation}
 Each bi-linear interpolation requires four data points to solve. 
-The method for placing these is discussed in chapter~\ref{chapter:Numerical Methods}. 
+The method for placing these four points is discussed in Chapter~\ref{chapter:Numerical Methods}. 
 They will be labeled roughly according to their cardinal direction to the interpolation location. 
 The resulting system of equations is laid out below in equation \eqref{eq:interp matrix1} and matrix form~\eqref{eq:interp matrix2}:
 \begin{equation}
-Aa=u \label{eq:interp matrix1}
+\textbf{A}\textbf{a}=\textbf{u} \label{eq:interp matrix1}
 \end{equation}
 \begin{gather}
 \putunder{
@@ -754,7 +752,7 @@ Aa=u \label{eq:interp matrix1}
 		  1&x_{nw}&y_{nw}&x_{nw}y_{nw}\\
 		  1&x_{ne}&y_{ne}&x_{ne}y_{ne}
 \end{bmatrix}
-}{A}
+}{\textbf{A}}
 \putunder{
 \begin{bmatrix}
 	a_0\\
@@ -762,7 +760,7 @@ Aa=u \label{eq:interp matrix1}
 	a_2\\
 	a_3
 \end{bmatrix}
-}{a\vphantom{A}}
+}{\textbf{a}\vphantom{A}}
 =
 \putunder{
 \begin{bmatrix}
@@ -771,26 +769,27 @@ Aa=u \label{eq:interp matrix1}
 	u_{nw}\\
 	u_{ne}
 \end{bmatrix}
-}{u\vphantom{A}}
+}{\textbf{u}\vphantom{A}}
 \label{eq:interp matrix2}
 \end{gather}
-Equation~\eqref{eq:Ainverse} gives the exact inverse of matrix $A$. 
-Matrix $B$ is based on the values of $A$. 
-The inverse is used to solve for the $a$ coefficients, \eqref{eq:acoef}.
+Equation~\eqref{eq:Ainverse} gives the exact inverse of matrix $\textbf{A}$:
 \begin{align}
-A^{-1} = \frac{B}{det(a)}
+\textbf{A}^{-1} = \frac{\textbf{B}}{\det{\textbf{A}}}
 \label{eq:Ainverse}\\
-a=A^{-1}u\;\label{eq:acoef}
+\textbf{a}=\textbf{A}^{-1}\textbf{u}\;\label{eq:acoef}
 \end{align}
+Matrix $\textbf{B}$ is based on the values of $\textbf{A}$. 
+The inverse is used to solve for the $\textbf{a}$ coefficients, \eqref{eq:acoef}.
 The external method stops here because all the $u$ values are considered known. 
-The embedded method moves rearranges and combines with the ghost node interpolation to become Equation~\eqref{eq:ID reorganized interpolation}. 
-The array $C$ is the velocity coefficients resulting from \eqref{eq:acoef} being manipulated. 
-Subscripts indicate the row and column of the matrix. 
-The calculation of $C$ is the portion of the bi-linear interpolation that is performed before the linear algebra step. 
+The embedded method moves, rearranges, and combines with the ghost node interpolation to become Equation~\eqref{eq:ID reorganized interpolation}:
 
 \begin{equation}
-\textbf{u}_{GN} = 2\textbf{u}_{BI} + C_{NW}\textbf{u}_{NW} + C_{NE}\textbf{u}_{NE} + C_{SW}\textbf{u}_{SW} + C_{SE}\textbf{u}_{SE}\label{eq:ID reorganized interpolation}
+u_{GN} = 2u_{BI} + C_{nw}u_{nw} + C_{ne}u_{ne} + C_{sw}u_{sw} + C_{se}u_{se}\label{eq:ID reorganized interpolation}
 \end{equation}
+The array $C$ holds the velocity coefficients resulting from \eqref{eq:acoef} being manipulated. 
+Subscripts indicate the row and column of the matrix. 
+The calculation of $C$, Equation \eqref{eq:ucoef 1}, is the portion of the bi-linear interpolation that is performed before the linear algebra step. 
+
 \begin{gather}
 	\begin{bmatrix}
 		C_{sw}\\
@@ -805,7 +804,7 @@ The calculation of $C$ is the portion of the bi-linear interpolation that is per
 		b_{13}&+&b_{23}x_{IP}&+&b_{33}y_{IP}&+&b_{43}x_{IP}y_{IP}\\
 		b_{14}&+&b_{24}x_{IP}&+&b_{34}y_{IP}&+&b_{44}x_{IP}y_{IP}
 	\end{bmatrix}
-	/det(A)
+	/\det{A}
 \label{eq:ucoef 1}
 \end{gather}
 
