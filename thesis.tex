@@ -17,13 +17,13 @@
 \submitdate{December 5, 2016}
 \commencementyear{2017}
 \abstract{Engineering applications often require fast, accurate solutions of fluid flow around freely moving bodies.
-The massive parallelism enabled by GPU architecture enables high performance, offering a promising alternative to traditional solver acceleration via multicore CPUs.
+The massive parallelism enabled by graphics processing unit (GPU) architecture enables high performance, offering a promising alternative to traditional solver acceleration via multicore central processing units (CPU).
 However, fully harnessing GPU parallelism requires specialized algorithms and computing strategies.
-This work modifies direct-forcing immersed boundary methods to model fluid-structure interaction and investigates its behavior on GPUs.
-We performed verification of our solver using lid-driven cavity flow, impulsively started flow over a cylinder, flow over a forced oscillating cylinder and vorticity induced vibration.}
+This work modifies direct-forcing immersed boundary methods to model fluid-structure interaction and investigates this behavior on GPUs.
+I performed solver verification using lid-driven cavity flow, impulsively started flow over a cylinder, flow over a forced oscillating cylinder and vortex-induced vibration.} 
 \acknowledgements{We gratefully acknowledge the support of NVIDIA Corporation with the donation of the Tesla K20 GPU used for this research.
 We also thank the Barba Group for developing, maintaining, and distributing their cuIBM code. 
-Thank you to my committee, everyone in the Niemeyer research group and the NNMREC lab.}
+Thank you to my committee, everyone in the Niemeyer research group, and the NNMREC lab.}
 
 \usepackage{algorithm}
 \usepackage{booktabs}
@@ -75,34 +75,34 @@ Mohd-Yusof~\cite{MohdYusof:1997wh} and Fadlun et al.~\cite{Fadlun:2000fl} develo
 Direct forcing methods interpolate for velocity at the nodes nearest to the body using the body velocity, eliminating the need to solve for a forcing term while simultaneously enforcing the no-slip condition.
 The early direct forcing methods did not include a method of modifying the Poisson equation for the presence of a body. 
 Not accounting for the body in the Poisson equation violates conservation of mass at the body. 
-Kim et al.~\cite{kim2001immersed}. developed a direct forcing method that adds mass source or sink terms at nodes intersected by the boundary to satisfy the conservation equation. 
+Kim et al.~\cite{kim2001immersed} developed a direct forcing method that adds mass source or sink terms at nodes intersected by the boundary to satisfy the conservation equation. 
 
 Using the direct forcing method with a moving body can cause numerical oscillations~\cite{liao2010simulating,Luo:2012gx}.
 This effect can be manageable for preset motion, but with a freely moving body the solver will poorly predict body position, velocity, and forces. 
 The numerical oscillations are caused by having different solution regimes in the domain, e.g., interpolation near the body and Navier--Stokes everywhere else. 
 Luo et al.~\cite{Luo:2012gx} deal with the numerical oscillations with a weighting function to transition between the two schemes, removing the discontinuity where the regimes transition. 
 
-The goal of this project is to develop a GPU-based solver, called cuIBM-FSI~\cite{cuIBM-v0.1} CUda(Compute Unified Device Architecture is a GPU programming language) Immersed Boundary Method Fluid Structure Interaction. 
+The goal of this project is to develop a GPU-based solver, called cuIBM-FSI~\cite{cuIBM-v0.1} CUda (Compute Unified Device Architecture, a GPU programming language for NVIDIA GPUs) Immersed Boundary Method Fluid Structure Interaction. 
 The eventual purpose of cuIBM-FSI is to have a highly efficient solver to study two-dimensional fluid structure interaction problem. 
 This thesis will showcase cuIBM-FSI and the development of simulating 2D, incompressible flow over a freely moving body using a GPU.
 
 Chapter \ref{chapter:Numerical Methods} discusses the theory of direct forcing methods and their applicability to freely moving bodies. 
 Chapter \ref{chapter:Implementation} covers the discretization of these methods as well as the challenges, strategies, and implementation for the GPU. 
-Chapter \ref{chapter:Validation} shows the verification and validation of different aspects of the solver using five different test cases: lid-driven cavity flow, flow over an impulsively started cylinder, forced motion of a cylinder in static flow, forced motion of a cylinder in flow, and vorticity induced vibrations (VIV). 
+Chapter \ref{chapter:Validation} shows the verification and validation of different aspects of the solver using five different test cases: lid-driven cavity flow, flow over an impulsively started cylinder, forced motion of a cylinder in static flow, forced motion of a cylinder in flow, and vortex-induced vibrations (VIV). 
 Chapter \ref{chapter:error} characterizes the order of accuracy and performance scaling for the immersed boundary method approaches considered. 
 The final chapter will summarize results, discuss issues encountered, and recommend future work.
 
 \chapter{Numerical methods}\label{chapter:Numerical Methods}
-The cuIBM-FSI solver is comprised of three separate methods. 
-One modified from the work of Fadlun et al.~\cite{Fadlun:2000fl}, and two based off the work of Luo et al.~\cite{Luo:2012gx}. 
+The cuIBM-FSI solver is comprised of three separate methods: 
+one modified from the work of Fadlun et al.~\cite{Fadlun:2000fl}, and two based off the work of Luo et al.~\cite{Luo:2012gx}. 
 For now, it will suffice to call these the modified Fadlun, external, and embedded methods and leave their explanations for later. 
 
 All of these methods, however, stem from the two-dimensional, incompressible form of the Navier--Stokes momentum and mass continuity equations:
 \begin{align}
 \frac{\partial \textbf{u}}{\partial t} + \nabla ( \textbf{uu} ) &= -\nabla p + \nu\nabla^{2}\textbf{u} \label{eq:NavierStokes} \\
-\nabla \cdot \textbf{u} &= 0 \label{eq:Continuity} \;.
+\nabla \cdot \textbf{u} &= 0, \label{eq:Continuity} \;.
 \end{align}
-where $\textbf{u}$ is velocity, $p$ is pressure and $\nu$ is the (constant) kinematic viscosity.
+where $\textbf{u}$ is velocity, $p$ is pressure, and $\nu$ is the (constant) kinematic viscosity.
 
 \section{Navier--Stokes fractional-step}\label{NM:NavierStokes}
 All three methods use the fractional-step approach~\cite{Perot1993} to solve Equations \eqref{eq:NavierStokes} and \eqref{eq:Continuity}, which breaks up the discretization of the Navier--Stokes equations. 
@@ -114,14 +114,13 @@ In the first sub-step, the momentum equations are solved without pressure to  ca
 where $\hat{\textbf{u}}$ is the intermediate velocity, $\Delta t$ is the time step, $L$ is the Laplacian operator, and $\textbf{RHS}$ is the discretized advection and diffusion terms. 
 The superscript $n$ represents the time step corresponding to time $t^n$. 
 In time, second-order Adams--Bashforth and Crank--Nicolson methods are used to discretize the advection and diffusion terms, respectively. 
-The implicit Crank-Nicolson method is used for the diffusion term because it is stable and the explicit Adams--Bashforth is used because it's difficult to discretize a non-linear term implicitly. 
+The implicit Crank--Nicolson method is used for the diffusion term because it is stable and the explicit Adams--Bashforth is used because it is difficult to discretize a non-linear term implicitly. 
 
 In the second sub step, the continuity equation is imposed to approximate the pressure, $p$, resulting in a Poisson equation:
 \begin{equation}\label{eq:Poisson}
 \nabla^2p^{n+1} = - \frac{\nabla\hat{\textbf{u}}}{\Delta t} \;,
 \end{equation}
-
-where $n+1$ indicates the value at the next time step. Velocity is updated in the last sub step with:
+\newline where $n+1$ indicates the value at the next time step. Velocity is updated in the last sub step with:
 \begin{equation}\label{eq:Projection}
 \textbf{u}^{n+1} = \hat{\textbf{u}} - \Delta t\nabla p^{n+1} \;.
 \end{equation}
@@ -136,9 +135,9 @@ In all three methods values at the hybrid nodes are interpolated for using value
 Everything outside of the body that is not a hybrid node is a fluid node. 
 Fluid nodes are solved with the Navier--Stokes equations. 
 Nodes immediately inside the body are ghost nodes and behave similar to Mittal et al.~\cite{Mittal:2005ii}. 
-The Fadlun (and modified Fadlun) method does not use these, but the external and embedded methods both try to set the values at the nodes in a way that enforces the body's boundary conditions, this will be discussed more in section~\ref{Sec:Field Extrapolation}. 
+The Fadlun (and modified Fadlun) method does not use these, but the external and embedded methods both try to set the values at the nodes in a way that enforces the body's boundary conditions; this will be discussed more in Section~\ref{Sec:Field Extrapolation}. 
 Everything else (i.e., all nodes inside the body that are not ghost nodes) are solid nodes. 
-The treatment of solid nodes does not affect the solution, but it does affect the computational time and force calculation.
+The treatment of solid nodes does not affect the solution, but it does affect the computational time and force calculation. 
 If solid nodes are solved, an arbitrary flow field will develop inside the body. 
 Figure~\ref{fig:node id} shows an example body and grid with labeled nodes. 
 
@@ -151,7 +150,7 @@ Figure~\ref{fig:node id} shows an example body and grid with labeled nodes.
 
 \section{Fadlun method}
 Peskin's original immersed boundary method~\cite{Peskin:1972gh} solved for a forcing term $f$ in Equation \eqref{eq:NavierStokes} at the hybrid nodes in a way that enforces the no-slip boundary condition. 
-The direct forcing methods developed by Fadlun~\cite{Fadlun:2000fl} and Yusof~\cite{MohdYusof:1997wh} do not solve the Navier--Stokes equation at the hybrid nodes. 
+The direct forcing methods developed by Fadlun et al.~\cite{Fadlun:2000fl} and Yusof~\cite{MohdYusof:1997wh} do not solve the Navier--Stokes equation at the hybrid nodes. 
 Instead, the velocity at the hybrid node is approximated by linearly interpolating between the second closest node and the body surface as seen in Figure~\ref{fig:2}. 
 \begin{figure}[!htb]
 	\centering
@@ -162,10 +161,10 @@ Instead, the velocity at the hybrid node is approximated by linearly interpolati
 At this point a clever observer might notice a complication induced by the fractional step method: should no slip be enforced on the intermediate velocity in the first sub-step, or the velocity during the third sub-step? 
 Fadlun et al.~\cite{Fadlun:2000fl} found that when no-slip is applied during the intermediate time step, the error introduced in the velocity correction step was always negligibly small compared to the velocity. 
 $\textbf{RHS}$ and $1-\frac{\Delta t}{2}L$ from Equation \eqref{eq:Intermediate Velocity} can be set up as if there was no body, then modified at the hybrid nodes to enforce no slip with the linear interpolation. 
-The Poisson equation \eqref{eq:Poisson} and projection step in equation \eqref{eq:Projection} are left unmodified in the work of Fadlun et al.~\cite{Fadlun:2000fl}. 
+The Poisson Equation \eqref{eq:Poisson} and projection step in Equation \eqref{eq:Projection} are left unmodified in the work of Fadlun et al.~\cite{Fadlun:2000fl}. 
 
 \section{Modified Fadlun method} 
-As will be described in more detail later (section \ref{sec:cylinder}), the original Fadlun method proved mediocre at predicting force in the transient region (while the boundary layer was developing in the impulsively started cylinder simulation). 
+As will be described in more detail later (Section \ref{sec:cylinder}), the original Fadlun method proved mediocre at predicting force in the transient region (while the boundary layer was developing in the impulsively started cylinder simulation). 
 This happens because the Poisson equation is not modified to account for the presence of a body, causing violations of the continuity equation. 
 Depending on the type of simulation this can create significant creation or destruction of mass at the body, leading to poor solver accuracy. 
 A number of methods have been proposed and tested to fix this issue. 
@@ -242,11 +241,11 @@ If none of the four field values are inside the body as seen in the extrapolatio
 To satisfy the no slip condition at the body, a Dirichlet boundary condition equal to the body velocity is used when extrapolating for velocity ghost nodes. 
 The pressure boundary condition is approximated by forcing the slope of pressure normal to the body surface, $\frac{dp}{dn}$, as constant using Neumann boundary conditions, Equation~\eqref{eq:Neumann}. 
 Using the relocated corners, a system of equations is set up to solve for the coefficients in Equation~\eqref{eq:Interpolation}. 
-Pressure nodes on the body use Equation~\eqref{eq:Neumann Node} in the system, which is simply the derivative of Equation~\eqref{eq:Interpolation}. 
+Pressure nodes on the body use Equation~\eqref{eq:Neumann Node} in the system, which is simply the derivative of Equation~\eqref{eq:Interpolation}:
 \begin{align}
 \phi (x,y) = a_0 + a_1 x + a_2y + a_3 x y \label{eq:Interpolation} \\
 \phi (x,y) = a_1 + a_2 + a_3 (x+y) \label{eq:Neumann Node} \\
-\left. \frac{\partial p}{\partial \textbf{n}}\right|_{BI} = \left. -\rho \frac{D\textbf{u}}{Dt}\cdot \hat{\textbf{n}}\right|_{BI}
+\left. \frac{\partial p}{\partial \textbf{n}}\right|_{BI} = \left. -\rho \frac{D\textbf{u}}{Dt}\cdot \hat{\textbf{n}}\right|_{BI},
 \label{eq:Neumann}\;.
 \end{align}
 where $\phi$ is the variable being interpolated ($u$, $v$, or $p$); $a_0$, $a_1$, $a_2$ and $a_3$ are coefficients; $x$ and $y$ give the node location;
@@ -254,12 +253,11 @@ $\rho$ is the density; $D\textbf{u}\left/Dt\right.$ is the material derivative; 
 Solving this system on the GPU requires direct inversions of the $4 \times 4$ matrices. 
 Appendix \ref{system of euqations} details this procedure. 
 Once the $a$ coefficients have been found, the field value at the image point can be calculated with Equation~\eqref{eq:Interpolation} and extrapolated across the surface using Equation~\eqref{eq:Velocity Interpolation} for velocity or ~\eqref{eq:Pressure Interpolation} for pressure: 
-
 \begin{align}
 \textbf{u}_{GN} &= 2\textbf{u}_{BI} - \textbf{u}_{IP} \label{eq:Velocity Interpolation} \\
-p_{GN} &= p_{IP} - \Delta l \left. \frac{\partial p}{\partial \textbf{n}}\right|_{BI} \;, \label{eq:Pressure Interpolation}
+p_{GN} &= p_{IP} - \Delta l \left. \frac{\partial p}{\partial \textbf{n}}\right|_{BI}, \; \label{eq:Pressure Interpolation}
 \end{align}
-where the subscripts GN, BI and IP indicate ghost nodes, body intercept and image point. $\Delta l$ is the distance from ghost node to image point.
+where the subscripts GN, BI, and IP indicate ghost nodes, body intercept, and image point, and $\Delta l$ is the distance from ghost node to image point.
 \subsection{Interpolation to hybrid nodes}
 \label{Sec:Interpolation}
 
@@ -285,7 +283,7 @@ Instead of the Dirac-delta style transition at the body of traditional direct-fo
 Its purpose is to dampen the numerical oscillations that result from the discontinuous switch. 
 The weighting scalar $\alpha$ is introduced to the solutions for intermediate velocity and the pressure:
 \begin{equation}\label{eq:Weight}
-\theta = \left(1-\alpha \right)\theta_{\text{Navier-Stokes}} + \alpha \theta_{\text{Interpolated}} \;,
+\theta = \left(1-\alpha \right)\theta_{\text{Navier-Stokes}} + \alpha \theta_{\text{Interpolated}}, \;
 \end{equation}
 where $\theta$ represents either intermediate velocity or pressure.
 Transitioning between the Navier--Stokes and interpolated solutions should meet three criteria:
@@ -296,7 +294,7 @@ Transitioning between the Navier--Stokes and interpolated solutions should meet 
 \end{enumerate}
 To solve for $\alpha$, it is assumed that each hybrid node has at most two neighboring ghost nodes (this will not be true for sharp corners):
 \begin{equation}
-\alpha = \sqrt{\left(\frac{\Delta_1}{\Delta x}\right)^2 + \left(\frac{\Delta_2}{\Delta y}\right)^2} \;.
+\alpha = \sqrt{\left(\frac{\Delta_1}{\Delta x}\right)^2 + \left(\frac{\Delta_2}{\Delta y}\right)^2}, \;
 \label{eq:Alpha}
 \end{equation}
 where $\Delta_1$ and $\Delta_2$ correlate to GN$_1$ and GN$_2$, respectively, and $\Delta x$ and $\Delta y$ are the grid spacing in the $x$ and $y$ directions, respectively. 
@@ -309,7 +307,7 @@ If the hybrid node only has one neighbor, then $\Delta=0$ for the other directio
 	\label{fig:Weight}
 \end{figure}
 
-\chapter{Implementation and Discretization}\label{chapter:Implementation}
+\chapter{Implementation and discretization}\label{chapter:Implementation}
 This chapter covers the discretization of the Navier--Stokes equations and all three immersed boundary methods.
 It also covers various details required to implement or understand the methods including sparse matrices, GPU strategies, grid staggering, node identification, force calculation, and linear algebra. 
 
@@ -389,28 +387,28 @@ Using a staggered grid is a relatively straightforward way to avoid odd-even dec
 A staggered grid stores scalar values (pressure, temperature, density etc.) at the cell centers and velocities at the cell faces. 
 Staggered grids also have the advantage of not requiring a pressure boundary condition. 
 cuIBM-FSI is staggered in the positive $x$ and $y$ directions. 
-That is, if the cell center is denoted as $i$ as shown in Figure~\ref{fig:stagger}, the top and right faces are also denoted as $i$ and the bottom and left faces are $i-nx$ and $i-1$. 
-It is worth noting that Luo et al.~\cite{Luo:2012gx} uses a collocated grid. 
+That is, if the cell center is denoted as $i$ as shown in Figure~\ref{fig:stagger}, the top and right faces are also denoted as $i$ and the bottom and left faces are $i-n_x$ and $i-1$ where $n_x$ is the number of cells that comprise the width of the domain. 
+It is worth noting that Luo et al.~\cite{Luo:2012gx} used a collocated grid. 
 Due to the sensitivity of immersed boundary methods near the body, this may cause some differences. 
 
 \begin{figure}[!htb]
 	\centering
 	\includestandalone[width=0.5\textwidth]{grid_stagger}
-	\caption{Grid staggering: The velocities are staggered in the positive x and y directions.}
+	\caption{Grid staggering: The velocities are staggered in the positive $x$ and $y$ directions.}
 	\label{fig:stagger}
 \end{figure}
 
-\section{Node Identification}
+\section{Node identification}
 Nodes are identified using a ray-tracing algorithm described in O'Rourke~\cite{o1998computational}.
 The implementation is based on the CPU implementation of the original cuIBM~\cite{krishnan2012validation}. 
-One thread is generated for each node, be it $u$, $v$ or $p$ and this thread performs the following actions to find rays in the $x$ direction. 
+One thread is generated for each node, be it $u$, $v$, or $p$ and this thread performs the following actions to find rays in the $x$ direction. 
 First, the Lagrangian body nodes are looped through to make segments with their nearest neighbors. 
 If the top of this segment is above the node and the bottom of the segment is below the node, then the $x$ location of the body at the height of the node is found (open circle in Figure~\ref{fig:node id 1}).
 The node is then tested for proximity to the body in the $x$ direction. 
-To determine what the node is, five $x$-coordinates are used: $x_{i-1}$, $x_{i}$, $x_{i+1}$, $x_{BI}$ and $x_{\text{body center}}$. 
+To determine what the node is, five $x$-coordinates are used: $x_{i-1}$, $x_{i}$, $x_{i+1}$, $x_{BI}$, and $x_{\text{body center}}$. 
 Using Figure \ref{fig:node id 1} for example, the body intercept will test as being greater than the body center, greater than $x_{i-1}$, and less than $x_{i}$, which makes $u_{i,j}$ a hybrid node. 
 
-It is possible for a hybrid or ghost node to be unable to find the body when searching in the $x$ direction, e.g. if the node is above the highest body node. 
+It is possible for a hybrid or ghost node to be unable to find the body when searching in the $x$ direction, e.g., if the node is above the highest body node. 
 After the algorithm looks for intersections in the $x$ direction, it searches in the $y$ direction. 
 In the case where a node is able to find the body in both the $x$ and $y$ directions, the $x$ direction is always chosen. 
 The $v$ velocity and pressure nodes are found in the same way as described above, but using different coordinates. 
@@ -420,7 +418,7 @@ This step is not critical for the solution of the Navier--Stokes equations, but 
 \begin{figure}
 	\centering
 	\includestandalone[width=0.5\textwidth]{node_id_1}
-	\caption{To find the hybrid and ghost nodes the position of the body must be translated from the Lagrangian body nodes to the Eulerian grid. The solid line is the real body which is represented by the Lagrangian body nodes(solid circles). The dashed lines are drawn between the body nodes and represent the discretized body.}
+	\caption{To find the hybrid and ghost nodes the position of the body must be translated from the Lagrangian body nodes to the Eulerian grid. The solid line is the real body which is represented by the Lagrangian body nodes (solid circles). The dashed lines are drawn between the body nodes and represent the discretized body.}
 	\label{fig:node id 1}
 \end{figure}
 
@@ -429,34 +427,33 @@ This step is not critical for the solution of the Navier--Stokes equations, but 
 
 The drag and lift on the body are calculated using the control volume approach detailed by Lai and Peskin~\cite{lai2000immersed}.
 The implementation of this approach is largely the same as the original cuIBM~\cite{layton2011cuibm}. 
-Lai and Peskin give Equation~\eqref{eq:force calculation} to calculate the drag force. 
+Lai and Peskin give Equation~\eqref{eq:force calculation} to calculate the drag force:
 \begin{equation}\label{eq:force calculation}
-F_D=-\int_{\partial \Omega_0} \rho u_i(\textbf{u}\cdot \textbf{n})ds- \int_{\partial \Omega_0}pn_ids+\int_{\partial \Omega_0}\mu \left(\frac{\partial u_i}{\partial x_j}+\frac{\partial u_j}{\partial x_i}\right)n_jds-\frac{\partial}{\partial t}\int_{\Omega_0}\rho u_i dx
+F_D=-\int_{\partial \Omega_0} \rho u_i(\textbf{u}\cdot \textbf{n})ds- \int_{\partial \Omega_0}pn_ids+\int_{\partial \Omega_0}\mu \left(\frac{\partial u_i}{\partial x_j}+\frac{\partial u_j}{\partial x_i}\right)n_jds-\frac{\partial}{\partial t}\int_{\Omega_0}\rho u_i dx,
 \end{equation}
 where $\Omega_0$ is any square sub-domain place around the body and $n_i$ and $n_j$ are the normal vectors in the $x$ and $y$ directions. 
-Once discretized, simplified and non-dimensionalized the terms can be rearranged into 3 groups, $F_{x,x}$, $F_{x,y}$ and $F_{x,u}$. 
-The first term, $F_{x,x}$, represents the forces in the $x$ direction from the left and right of the control volume and is formed from the second and third integral in Equation~\eqref{eq:force calculation}. 
-$F_{x,y}$ is the forces in the x direction from the top and bottom of the control volume. 
-It comes from the first and third integral. 
+Once discretized, simplified and non-dimensionalized the terms can be rearranged into three groups: $F_{x,x}$, $F_{x,y}$ and $F_{x,u}$. 
+The first term, $F_{x,x}$, represents the forces in the $x$ direction from the left and right of the control volume and is formed from the second and third integrals in Equation~\eqref{eq:force calculation}. 
+$F_{x,y}$ is the forces in the $x$ direction from the top and bottom of the control volume; it comes from the first and third integral. 
 The fourth integral becomes $F_{x,u}$, the $x$ force from the unsteady term and includes everything inside of the control volume. 
-These terms are partially discretized in Equations \eqref{eq:force calculation 2}, \eqref{eq:force calculation 3}, and \eqref{eq:force calculation 4}. 
+These terms are partially discretized in Equations \eqref{eq:force calculation 2}, \eqref{eq:force calculation 3}, and \eqref{eq:force calculation 4}:
 \begin{align}
-FxX &=-\sum_{\Omega_y}\left((p_e-p_w)+(u_e^2-u_w^2)-\nu\left(\left.\frac{du}{dx}\right|_e-\left.\frac{dv}{dx}\right|_w\right)\right)dy\label{eq:force calculation 2}\\
-FxY &=-\sum_{\Omega_x}\left(0.5(u_nv_n-u_sv_s)-0.25\nu \left(\left.\frac{du}{dy}\right|_n+\left.\frac{dv}{dx}\right|_n-\left.\frac{du}{dy}\right|_s-\left.\frac{dv}{dx}\right|_s\right)\right),\label{eq:force calculation 3}\\
-FxU &=\frac{u_i^{n+1}-u_i^{n}}{dt}0.5dydx\;\label{eq:force calculation 4}
+F_{x,x} &=-\sum_{\Omega_y}\left((p_e-p_w)+(u_e^2-u_w^2)-\nu\left(\left.\frac{du}{dx}\right|_e-\left.\frac{dv}{dx}\right|_w\right)\right)dy\label{eq:force calculation 2}\\
+F_{x,y} &=-\sum_{\Omega_x}\left(0.5(u_nv_n-u_sv_s)-0.25\nu \left(\left.\frac{du}{dy}\right|_n+\left.\frac{dv}{dx}\right|_n-\left.\frac{du}{dy}\right|_s-\left.\frac{dv}{dx}\right|_s\right)\right)\label{eq:force calculation 3}\\
+F_{x,u} &=\frac{u_i^{n+1}-u_i^{n}}{dt}0.5dydx\;\label{eq:force calculation 4}
 \end{align}
-The subscripts $n$,$e$,$s$,$w$ represent the north, east, south and west faces of the sqaure domain $\Omega_0$, respectively.
+The subscripts $n$,$e$,$s$,$w$ represent the north, east, south, and west faces, respectively, of the square domain $\Omega_0$.
 In practice, varying the size of $\Omega_0$ from $L=4$ to $L=10$ was not found to have a significant effect on the force or computabletion time.
-The body did not have to be at the exact center of the domain.
+The body also does not have to be at the exact center of the domain.
 Given this, the control volume is generally kept in the same location as the body moves around inside it.
-Typically a square with sides $L=10$ is used for a body of size $D=1$ that moves about $D$ away from center.
+Typically, a square with sides $L=10$ is used for a body of size $D=1$ that moves about $D$ away from center.
 
 If the solid and ghost nodes are not at steady state, Equation \eqref{eq:force calculation} will predict force poorly. 
 To circumvent this effect over multiple solvers, all nodes inside the body are excluded from the unsteady term. 
 
-\section{Linear Algebra}
+\section{Linear algebra}
 \label{Preconditioning and Linear Algebra Solvers}
-CUSP(CUDA sparse) is the linear algebra library used by cuIBM-FSI. 
+CUSP (CUDA sparse) is the linear algebra library used by cuIBM-FSI. 
 CUSP can handle many different types of sparse data structures and has several solvers. 
 cuIBM-FSI uses a bi-conjugate gradient stabilized (BiCGSTAB) method for both the intermediate velocity and Poisson equation. 
 Preconditioners are used to improve performance. 
@@ -476,7 +473,7 @@ In the first step, Equation~\eqref{eq:Incompressible NavierStokes} drops the pre
 \end{equation}
 In the second sub step, Equation~\eqref{eq:Poisson} is solved for pressure. 
 In the third sub step, the final velocity is updated. 
-This section goes over the discretization details of using fractional step for normal Navier--Stokes. 
+This section goes over the discretization details of using fractional step for the standard Navier--Stokes equations. 
 Sections~\ref{sec:ID fadlun}, \ref{sec:ID external}, and \ref{sec:ID embedded} cover the modifications required for the presence of an immersed boundary with the modified Fadlun, external, and embedded methods. 
 
 \subsection{Intermediate velocity}
@@ -484,13 +481,13 @@ Sections~\ref{sec:ID fadlun}, \ref{sec:ID external}, and \ref{sec:ID embedded} c
 
 The advection term, $\nabla (\textbf{uu})$, is discretized in time using explicit, second-order Adams--Bashforth. 
 The diffusion, $\nu \nabla^2 \textbf{u}$, is discretized using Crank--Nicolson. 
-The result is an expanded form of Equation~\eqref{eq:Intermediate Velocity}, Equation~\eqref{eq:Expanded Intermediate Velocity}: 
+The result is an expanded form of Equation~\eqref{eq:Intermediate Velocity}: 
 \begin{equation}
 \label{eq:Expanded Intermediate Velocity}
-\hat{\textbf{u}} - \frac{\Delta t}{2}L(\hat{\textbf{u}}) = \textbf{u}^n + \Delta t\left(0.5L(\textbf{u}^n) - 1.5N(\textbf{u}^n) + 0.5N(\textbf{u}^{n-1}) + BC\right),
+\hat{\textbf{u}} - \frac{\Delta t}{2}L(\hat{\textbf{u}}) = \textbf{u}^n + \Delta t\left(0.5L(\textbf{u}^n) - 1.5N(\textbf{u}^n) + 0.5N(\textbf{u}^{n-1}) + \text{BC}\right),
 \end{equation}
 where $N$ is the advection operator, $L$ is the diffusion Laplacian operator, and $BC$ is the boundary condition term (the leftover terms from applying the Laplacian to $\hat{\textbf{u}}$). 
-Each term ($N$, $L$, $BC$ and $LHS$) is described in its own section below. 
+Each term ($N$, $L$, $\textbf{BC}$, and $LHS$) is described in its own section below. 
 
 \subsubsection{Advection terms}
 \label{sed:ID NS Advection}
@@ -501,7 +498,7 @@ Note that $u$ and $v$ represent scalar velocities but $\textbf{u}$ is a vector.
 &u\frac{\partial u}{\partial x} + v\frac{\partial u}{\partial y} \label{eq: Advection 1} \\ 
 &u\frac{\partial v}{\partial x} + v\frac{\partial v}{\partial y} \; \label{eq: Advection 2}
 \end{align}
-Discretizing Equation~\eqref{eq: Advection 1} on a uniform grid using second order central differences results in Equation~\eqref{eq: discretized uniform advection}. 
+Discretizing Equation~\eqref{eq: Advection 1} on a uniform grid using second order central differences results in Equation~\eqref{eq: discretized uniform advection}: 
 \begin{align}
 u\frac{\partial u}{\partial x} + v\frac{\partial u}{\partial y} = u_{i,j}\frac{u_{i+1,j} - u_{i-1,j}}{2dx} &+ \frac{v_{i,j} + v_{i+1,j} + v_{i,j-1} + v_{i+1,j-1}}{4}\frac{u_{i,j+1} - u_{i,j-1}}{2dy}, \label{eq: discretized uniform advection}\\
 \left.\frac{du}{dx}\right|_i&\approx\left.\frac{du}{dx}\right|_1 + \frac{\left.\frac{du}{dx}\right|_2 - \left.\frac{du}{dx}\right|_1}{0.5(dx_i + dx_{i+1})}0.5dx_i\; \label{eq: discretized nonuniform advection} 
@@ -527,7 +524,7 @@ If $\Delta x_{i+1}$ does not equal $\Delta x$ then $\frac{\partial u}{\partial x
 
 In addition, $v$ must be bilinearly interpolated for at $u_{i,j}$ on a non-uniform grid.
 Figure~\ref{fig:bi-linear-interpolation} shows a schematic of bilinear interpolation.
-First, $v$ at 1 and 2 are linearly interpolated for using Equations \eqref{eq:bili 1} and \eqref{eq:bili 2}. 
+First, $v$ at the nodes marked 1 and 2 in Figure \ref{fig:discretized uniform advection}b are linearly interpolated for using Equations \eqref{eq:bili 1} and \eqref{eq:bili 2}. 
 Then, $v_1$ and $v_2$ are used to linearly interpolate for $v$ at $u_{i,j}$ using Equation \eqref{eq:bili 3}.
 \begin{align}
 v_1 &\approx \frac{x_2 - x}{x_2 - x_1}v_{i,j} + \frac{x - x_1}{x_2 - x_1}v_{i+1,j} \label{eq:bili 1} \\
@@ -546,9 +543,9 @@ v_x &\approx \frac{y_2 - y}{y_2 - y_1}v_{1} + \frac{y - y_1}{y_2 - y_1}v_{2} \; 
 The diffusion term, $\nu \nabla^2 \textbf{u}$, expands to become Equations \eqref{eq:ID Diffusion x} and \eqref{eq:ID Diffusion y} for the $x$ and $y$ momentum equations, respectively:
 \begin{align}
 & \frac{1}{Re}\left(\frac{\partial^2 u}{\partial x^2} + \frac{\partial^2 u}{\partial y^2}\right)\label{eq:ID Diffusion x} \\
-& \frac{1}{Re}\left(\frac{\partial^2 v}{\partial x^2} + \frac{\partial^2 v}{\partial y^2}\right)\; \label{eq:ID Diffusion y}
+& \frac{1}{Re}\left(\frac{\partial^2 v}{\partial x^2} + \frac{\partial^2 v}{\partial y^2}\right),\; \label{eq:ID Diffusion y}
 \end{align}
-where $\nu$ can be simplified to the inverse of Reynolds number(Re) as long as the characteristic velocity is one. 
+where $\nu$ can be simplified to the inverse of Reynolds number (Re) as long as the characteristic velocity is one. 
 As with advection, the discretizations for Equations \eqref{eq:ID Diffusion x} and \eqref{eq:ID Diffusion y} are different because they are computed at the $u$ and $v$ nodes. 
 The discretization is also more complex when done on a non-uniform grid.
 Equation \eqref{eq:ID Diffusion x} becomes \eqref{eq:ID Diffusion 1} when discretized over a uniform grid: 
@@ -577,7 +574,7 @@ Figure~\ref{fig:ID iv bc} shows the grid relevant to discretization at the north
 The problems associated with being at the domain's edge are all based on trying to access values that are out of bounds. 
 This issue pops up with several flavors. 
 The first is trying to access a velocity value on the boundary edge. 
-For example, if $\frac{\partial u}{\partial x}$ is calculated at $u_{i,j}$ using the standard second-order central differencing, $u_{i+1,j}$ is required but it's outside the domain. 
+For example, if $\frac{\partial u}{\partial x}$ is calculated at $u_{i,j}$ using the standard second-order central differencing, $u_{i+1,j}$ is required but it falls outside the domain. 
 The solver uses Dirichlet and convective velocity boundary conditions. 
 If an edge uses a convective boundary condition, that velocity gets calculated before the time step starts, so that the rest of the solver can treat it as a Dirichlet boundary condition. 
 When the solver encounters a value it needs on the boundary edge, it pulls a velocity value for that edge from a separate array. 
@@ -586,14 +583,12 @@ Boundary arrays store values at the edge of the domain.
 The second type of issue occurs when the required velocity value is outside the boundary. 
 For example if $\frac{\partial^2 u}{\partial y^2}$ from the diffusion term is calculated at $u_{i,j}$, it needs a value from $u_{i,j+1}$, which is outside the boundary. 
 Outlying velocities are approximated by assuming the derivative of velocity is constant at the boundary. 
-The linear extrapolation in Equation~\eqref{eq:bc extrapolation} simplifies to \eqref{eq:bc extrapolation simplified}, a relation for the outlying velocity in terms of known values. 
-Uniform and stretching grids both place the outlying node $0.5dx$ or $0.5dy$ away from the domain edge to satisfy Equation \eqref{eq:bc extrapolation}. 
-
+The linear extrapolation in Equation~\eqref{eq:bc extrapolation} simplifies to \eqref{eq:bc extrapolation simplified}, a relation for the outlying velocity in terms of known values:
 \begin{align}
 u_{bc} &= \frac{u_{i,j+1} - u_{i,j}}{dy_j}0.5dy_j+ u_{i,j} \label{eq:bc extrapolation} \\
 u_{i,j+1} &= 2u_{bc} - u_{i,j} \; \label{eq:bc extrapolation simplified}
 \end{align}
-
+Uniform and stretching grids both place the outlying node $0.5dx$ or $0.5dy$ away from the domain edge to satisfy Equation \eqref{eq:bc extrapolation}. 
 \begin{figure}[!htb]
 	\centering
 	\includestandalone[width=0.5\textwidth]{bc_discretization}
@@ -607,14 +602,13 @@ The left hand side of the intermediate velocity Equation \eqref{eq:Intermediate 
 \begin{equation}
 \hat{\textbf{u}} - \frac{\Delta t}{2}L(\hat{\textbf{u}})
 \end{equation}
-The discretization of the Laplacian term is the same as described in the diffusion Section, ()\ref{sec:NS ID Diffusion}). 
+The discretization of the Laplacian term is the same as described in the diffusion Section (\ref{sec:NS ID Diffusion}). 
 Boundary terms are approximated by assuming $\hat{\textbf{u}}=u$. 
 All the boundary terms become known values using this assumption, so they are moved to the right side of the equation. 
-Because both the $u$ and $v$ velocities are stored in the same array, the left-hand side matrix will be size $\left((n_x-1)n_y + (n_y-1)n_x\right)^2$. 
-$n_x$ and $n_y$ represent the number of cells in the $x$ and $y$ directions, respectively.
-The negative one is a bi-product of staggering the grid. 
+Because both the $u$ and $v$ velocities are stored in the same array, the left-hand side matrix will be size $\left((n_x-1)n_y + (n_y-1)n_x\right)^2$, where $n_x$ and $n_y$ represent the number of cells in the $x$ and $y$ directions, respectively.
+The ``-1'' is a bi-product of staggering the grid. 
 Each row in the matrix corresponds to one velocity node. 
-Most of the rows will have five non-zero columns: one for the neighboring nodes to the north, east, south and west and one for the center node. 
+Most of the rows will have five non-zero columns: one for the neighboring nodes to the north, east, south, and west and one for the center node. 
 Rows that represent a velocity node on the edge of the domain will only have four non-zero columns, and rows that represent a corner velocity will only have three. 
 
 \subsection{Poisson equation}
@@ -625,7 +619,7 @@ Instead, the velocity reconstruction equation, \eqref{eq:Projection}, and the co
 At a non-boundary node the two equations simplify to become the Poisson equation.
 When at a boundary, the segment that would use a pressure term outside the domain is replaced by $u^{n+1}$, eliminating the need for a pressure boundary condition.
 
-The discretized continuity equation \eqref{eq:discretized continuity} is shown alongside a discretized velocity reconstruction for $\hat{u}_{i+1,j}$, Equation \eqref{eq:discretized projection}. 
+The discretized continuity Equation \eqref{eq:discretized continuity} is shown alongside a discretized velocity reconstruction for $\hat{u}_{i+1,j}$, Equation \eqref{eq:discretized projection}. 
 The other velocities used in the continuity equation are discretized in the same way. 
 In the reference Figure \ref{fig:ID poisson}, $u_{i,j}^{n+1}$ is not substituted for.
 Instead, the Dirichlet boundary condition velocity is used:
@@ -640,18 +634,18 @@ u_{i,j}^{n+1} = \hat{u} - \frac{p_{i+1,j}^{n+1} - p_{i,j}^{n+1}}{dx_i + dx_{i+1}
 	\label{fig:ID poisson}
 \end{figure}
 
-\section{Modified fadlun immersed boundary method}
+\section{Modified Fadlun immersed boundary method}
 \label{sec:ID fadlun}
 \label{sec:modified fadlun}
 When at an immersed body, the Navier--Stokes equation needs some additional treatment to correctly represent a body. 
-This section will detail the implementation of my modified Fadlun et al.~\cite{Fadlun:2000fl} approach to dealing with an immersed boundary.
+This section details the implementation of my modified Fadlun et al.~\cite{Fadlun:2000fl} approach to dealing with an immersed boundary.
 
 \subsection{Intermediate velocity}
 \label{sec:ID fadlun intermediate velocity}
 The interpolation that enforces the no-slip condition happens in the intermediate velocity step. 
 To solve for intermediate velocity, the right hand side is first computed as for no body as described in Section \ref{sec:ID NS intermediate velocity}. 
 Then, the hybrid nodes are replaced with interpolation values. 
-Equation~\eqref{eq:ID intermediate velocity interpolation} gives an example interpolation that corresponds to Figure~\ref{fig:ID linear interpolation}. 
+Equation~\eqref{eq:ID intermediate velocity interpolation} gives an example interpolation that corresponds to Figure~\ref{fig:ID linear interpolation}:
 \begin{equation}
 \left[1\right]u_{i+1,j} + \left[-\frac{b}{a}\right]u_{i,j} = \left(1-\frac{b}{a}\right)u_{\text{body}}
 \label{eq:ID intermediate velocity interpolation}
@@ -663,14 +657,14 @@ As a rule of thumb, the interpolation will be along the $x$ direction if the bod
 The algorithm prefers to interpolate along the $x$ direction; it only interpolates along $y$ if it can not interpolate along the $x$. 
 Figure \ref{fig:ID linear interpolation} shows an example of the linear interpolation at the boundary. 
 Equation \eqref{eq:ID intermediate velocity interpolation} shows the interpolation reworked to fit into established matrices used to solve for intermediate velocity. 
-The terms inside the brackets represent the left side matrix. 
+The terms inside the brackets represent the left-hand side matrix. 
 It proved to be somewhat difficult to write a GPU kernel to edit the sparse left side matrix to incorporate the interpolation. 
-Instead of creating the left side matrix for Navier--Stokes then editing it for the immersed boundary method as was done with the right side, a separate kernel was written. 
+Instead of creating the left-hand side matrix for Navier--Stokes then editing it for the immersed boundary method as was done with the right side, a separate kernel was written. 
 
 \begin{figure}[!htb]
 	\centering
 	\includestandalone[width=0.5\textwidth]{linear_interpolation}
-	\caption{Linear interpolation to enforce no slip condition at the boundary.}
+	\caption{Linear interpolation to enforce no-slip condition at the boundary.}
 	\label{fig:ID linear interpolation}
 \end{figure}
 
@@ -684,10 +678,10 @@ My modification to the Fadlun method handles this problem by adding a treatment 
 At a hybrid node, if any term from Equation~\eqref{eq:discretized projection} is inside the boundary it is assumed that $u_{i,j}^{n+1}$ is close enough to the body to approximate it as the body velocity. 
 If the body passes through the cell, $dx_i$ and/or $dy_j$ from Equation \eqref{eq:discretized continuity} are decreased to appropriately measure the new cell size. 
 
-\section{Luo Immersed Boundary Method}
+\section{Luo immersed boundary method}
 \label{sec:ID luo}
-cuIBM-FSI has two methods based off the approach given by Luo et al~\cite{Luo:2012gx}. 
-Luo et al.~extrapolates values to ghost nodes an interpolates values at hybrid nodes.
+cuIBM-FSI has two methods based off the approach given by Luo et al.~\cite{Luo:2012gx}. 
+Luo et al.~\cite{Luo:2012gx} extrapolates values to ghost nodes an interpolates values at hybrid nodes.
 They left out details describing exactly where all this interpolating and extrapolating takes place. 
 I tried doing it two ways. 
 The key difference between the two approaches is when the extrapolation and interpolation takes place. 
@@ -698,11 +692,11 @@ Simplifying the linear algebra this way reduces the computational time at the co
 The ``embedded'' method performs  interpolations, extrapolations, and weighting inside of the linear algebra solutions for the intermediate velocity and pressure. 
 All of the extrapolation and interpolation happens inside of the linear algebra steps.
 Field values will solved by plugging Equations~\eqref{eq:Intermediate Velocity} or \eqref{eq:Poisson} and \eqref{eq:Interpolation} into Equation~\eqref{eq:Weight}. 
-The discretization of these can be seen in section \ref{sec:ID embedded}. 
+The discretization of these can be seen in Section \ref{sec:ID embedded}. 
 
 Two key implementation details distinguish cuIBM-FSI from Luo et al.~\cite{Luo:2012gx}. 
-Firstly, Luo et al.~did not use a staggered grid. 
-Secondly, Luo et al.~used Crank--Nicholson to discretize both the advection and diffusion terms, whereas cuIBM-FSI uses Adams--Bashforth for the advection terms. 
+First, Luo et al.~did not use a staggered grid. 
+Second, Luo et al.~used Crank--Nicholson to discretize both the advection and diffusion terms, whereas cuIBM-FSI uses Adams--Bashforth for the advection terms. 
 
 \subsection{External interpolation method}
 \label{sec:ID external}
@@ -713,7 +707,7 @@ The following sequence is set up such that a value is interpolated or extrapolat
 
 
 \begin{enumerate}
-	\item Identify all nodes as hybrid, ghost, fluid or solid. 
+	\item Identify all nodes as hybrid, ghost, fluid, or solid. 
 	\item Extrapolate $u$ and $v$ velocity values to ghost nodes. 
 	\item Interpolate for $u$ and $v$ velocities at hybrid nodes. 
 	\item Calculate the right-hand side terms for the intermediate velocity solution. 
@@ -734,16 +728,16 @@ The following sequence is set up such that a value is interpolated or extrapolat
 In the embedded interpolation method, the Navier--Stokes and interpolated solutions for field values are calculated and weighted inside each linear-algebra solver. 
 In the intermediate velocity substep, the right hand side terms are first calculated as if no body was present. 
 The weighting coefficients and part of the interpolation can be calculated prior to the linear algebra because they are only dependent on the geometry, not the velocity or pressure. 
-The equations for bi-linear interpolation, Equation \eqref{eq:Interpolation}, and interpolating to the ghost node, Equations \eqref{eq:Velocity Interpolation} or \eqref{eq:Pressure Interpolation}, are combined then rearranged to separate field value terms. 
+The equations for bilinear interpolation, Equation \eqref{eq:Interpolation}, and interpolating to the ghost node, Equations \eqref{eq:Velocity Interpolation} or \eqref{eq:Pressure Interpolation}, are combined then rearranged to separate field value terms. 
 A similar operation happens for the hybrid nodes. 
 To illustrate the process of separating these variables, $u$ is plugged in for $\phi$ in Equation~\eqref{eq:ID reorganized interpolation}:
 \begin{equation}
-u(x,y) = a_0 + a_1x +a_2y+a_3xy
+u(x,y) = a_0 + a_1x +a_2y+a_3xy.
 \end{equation}
-Each bi-linear interpolation requires four data points to solve. 
+Each bilinear interpolation requires four data points to solve. 
 The method for placing these four points is discussed in Chapter~\ref{chapter:Numerical Methods}. 
 They will be labeled roughly according to their cardinal direction to the interpolation location. 
-The resulting system of equations is laid out below in equation \eqref{eq:interp matrix1} and matrix form~\eqref{eq:interp matrix2}:
+The resulting system of equations is laid out below in Equation \eqref{eq:interp matrix1} and matrix form~\eqref{eq:interp matrix2}:
 \begin{equation}
 \textbf{A}\textbf{a}=\textbf{u} \label{eq:interp matrix1}
 \end{equation}
@@ -772,17 +766,17 @@ The resulting system of equations is laid out below in equation \eqref{eq:interp
 	u_{nw}\\
 	u_{ne}
 \end{bmatrix}
-}{\textbf{u}\vphantom{A}}
+}{\textbf{u}\vphantom{A}}.
 \label{eq:interp matrix2}
 \end{gather}
 Equation~\eqref{eq:Ainverse} gives the exact inverse of matrix $\textbf{A}$:
 \begin{align}
 \textbf{A}^{-1} = \frac{\textbf{B}}{\det{\textbf{A}}}
 \label{eq:Ainverse}\\
-\textbf{a}=\textbf{A}^{-1}\textbf{u}\;\label{eq:acoef}
+\textbf{a}=\textbf{A}^{-1}\textbf{u}.\;\label{eq:acoef}
 \end{align}
 Matrix $\textbf{B}$ is based on the values of $\textbf{A}$. 
-The inverse is used to solve for the $\textbf{a}$ coefficients, \eqref{eq:acoef}.
+The inverse is used to solve for the $\textbf{a}$ coefficients, Equation \eqref{eq:acoef}.
 The external method stops here because all the $u$ values are considered known. 
 The embedded method moves, rearranges, and combines with the ghost node interpolation to become Equation~\eqref{eq:ID reorganized interpolation}:
 
@@ -791,8 +785,7 @@ u_{GN} = 2u_{BI} + C_{nw}u_{nw} + C_{ne}u_{ne} + C_{sw}u_{sw} + C_{se}u_{se}\lab
 \end{equation}
 The array $C$ holds the velocity coefficients resulting from \eqref{eq:acoef} being manipulated. 
 Subscripts indicate the row and column of the matrix. 
-The calculation of $C$, Equation \eqref{eq:ucoef 1}, is the portion of the bi-linear interpolation that is performed before the linear algebra step. 
-
+The calculation of $C$, Equation \eqref{eq:ucoef 1}, is the portion of the bilinear interpolation that is performed before the linear algebra step:
 \begin{gather}
 	\begin{bmatrix}
 		C_{sw}\\
@@ -807,7 +800,7 @@ The calculation of $C$, Equation \eqref{eq:ucoef 1}, is the portion of the bi-li
 		b_{13}&+&b_{23}x_{IP}&+&b_{33}y_{IP}&+&b_{43}x_{IP}y_{IP}\\
 		b_{14}&+&b_{24}x_{IP}&+&b_{34}y_{IP}&+&b_{44}x_{IP}y_{IP}
 	\end{bmatrix}
-	/\det{A}
+	/\det{(A)}
 \label{eq:ucoef 1}
 \end{gather}
 
@@ -845,8 +838,7 @@ As the left-hand side matrix is being built, the algorithm will place five of th
 To place the last node, each hybrid node is counted and labeled from left to right, top to bottom. 
 Extra memory is allocated to the end of the sparse matrix arrays, with one additional spot for each counted hybrid node. 
 The sixth entry to sparse matrix is placed at the end of the normal amount of entries to the sparse matrix plus the count of the hybrid nodes. 
-For example, before the immersed boundary is considered, the left-hand side matrix is expected to have twenty thousand entries and has 200 hybrid nodes. 
-Hybrid node fifty 50 have its sixth value placed at location 20050 in the sparse matrix arrays. 
+For example, if before the immersed boundary is considered, the left-hand side matrix is expected to have twenty thousand entries and has 200 hybrid nodes then, hybrid node 50 will have its sixth value placed at location 20050 in the sparse matrix arrays. 
 
 After the left-hand side matrix is made, it is sorted by row and column using a built-in CUSP function and then the preconditioners are rebuilt.
 The CUSP solvers are optimized to operate on a sorted matrix and would sometimes fail to converge due to out of order values at the end of the arrays.
@@ -886,11 +878,10 @@ The third simulation tests the solvers ability to handle a body with prescribed 
 In this test, a cylinder has a set sinusoidal motion in an initially stagnant flow. 
 The fourth simulation is another impulsively started cylinder, but with a set cylinder motion. 
 Tests three and four look at the force calculation for a moving body and help quantify the numerical oscillation caused by direct forcing. 
-The last simulation is called vortex induced vibration (VIV) and tests the solvers' ability to accurately predict body location, velocity and force when the body motion is not prescribed. 
+The last simulation is called vortex-induced vibration (VIV) and tests the solvers' ability to accurately predict body location, velocity, and force when the body motion is not prescribed. 
 
 \section{Lid-driven cavity flow}
-
-Lid-driven cavity flow is a simulation that tests the discretization and implementation of the incompressible, two-dimensional Navier--Stokes equations \eqref{eq:NavierStokes} on the GPU. 
+Lid-driven cavity flow is a simulation that tests the discretization and implementation of the incompressible, two-dimensional Navier--Stokes Equations \eqref{eq:NavierStokes} on the GPU. 
 In lid-driven cavity flow, fluid flow is ``driven'' by motion of the top boundary of a square domain; i.e., the lid of the square domain has a Dirichlet boundary condition of $u=1$, and all of the other velocity boundary conditions are set to zero. 
 Eventually the flow will achieve a steady-state swirling flow field that can be verified with results in literature. 
 I chose to compare simulations with Reynolds numbers of 100 and 1000 to those of Ghia et al.~\cite{Ghia:1982el}. 
@@ -906,12 +897,12 @@ Figure \ref{fig:lid driven cavity} shows the domain and aforementioned centerlin
 For a Reynolds number of 100 the domain was discretized into a $32\times32$ grid. 
 With a time step of 0.01, the maximum CFL number works out to approximately 0.3 using Equation~\eqref{eq:cfl}:
 \begin{equation}
-\text{CFL}_{\text{MAX}}=\Delta t\left(\frac{u}{\Delta x}+\frac{v}{\Delta y}\right)_{\text{MAX}}
+\text{CFL}_{\text{max}}=\Delta t\left(\frac{u}{\Delta x}+\frac{v}{\Delta y}\right)_{\text{max}}
 \label{eq:cfl}
 \end{equation}
 For a Reynolds number of 1000 the domain was discretized into a $128\times128$ grid. 
 A time step of 0.004 keeps the maximum CFL at 0.3. 
-Figure~\ref{fig:ldc} (a) and (c) show the $v$ velocity at the horizontal centerline and (b) and (d) shows the $u$ velocity at the vertical centerline, with the top and bottom rows showing results for Re=100 and 1000, respectively. 
+Figures~\ref{fig:ldc} (a) and (c) show the $v$ velocity at the horizontal centerline and (b) and (d) show the $u$ velocity at the vertical centerline, with the top and bottom rows showing results for Re=100 and 1000, respectively. 
 \begin{figure}[!htb]
 	\centering
 	\begin{subfigure}{0.4\textwidth}
@@ -948,7 +939,7 @@ To simulate an impulsively started cylinder, a circular body is anchored to the 
 The left, top, and bottom boundaries have Dirichlet $u$ and $v$ values of one and zero forming an inlet and two free stream boundaries, respectively. 
 A convective boundary condition, given in Equation \eqref{eq:robin} is used at right edge that uses one and zero for nominal $u$ and $v$ values. 
 \begin{equation}
-u_{\text{boundary}}=u_{\text{boundary}}\left(1-\frac{U_{\text{nominal}}\Delta t}{dx}\right) + \frac{U_{\text{nominal}}\Delta t}{dx}u_{\text{nearest to boundary}}
+u_{n_x}=u_{n_x}\left(1-\frac{U_{\text{nominal}}\Delta t}{dx}\right) + \frac{U_{\text{nominal}}\Delta t}{dx}u_{n_x-1}
 \label{eq:robin}
 \end{equation}
 The grids are made up of uniform spacing in the area immediately around the immersed body that stretches as it moves away from the center until it reaches the domain's edge at $\pm$ 15. 
@@ -956,14 +947,14 @@ Figure~\ref{fig:iscylinder} shows the domain of the Re=40 simulation, the domain
 \begin{figure}[!htb]
 	\centering
 	\includestandalone[width=0.5\textwidth]{CylinderDomain}
-	\caption{The domain and boundary conditions for the impulsively started cylinder simulation with Re=40.}
+	\caption{The domain and boundary conditions for the impulsively started cylinder simulation with Re=40. The embedded method is excluded because its results are the same as the external method.}
 	\label{fig:iscylinder}
 \end{figure}
 
-All lengths are normalized against the body diameter, i.e, the cylinder's diameter is one. 
+All lengths are normalized against the body diameter, i.e., the cylinder's diameter is one. 
 For a Re=40 a uniform grid with spacing 0.025 is used from (-0.6,-0.6) to (0.6,0.6) for a total of $186\times186$ (34596) cells are used. 
 A time step of 0.005 is used with a maximum CFL of approximately 0.4. 
-Figures \ref{fig:cy40}a and \ref{fig:cy40}b compare the computed drag force of the modified Fadlun and external Luo methods, respectively, with that of Koumoutsakos and Leonard~\cite{Koumoutsakos:1995bf}. The embedded method is not shown because the force is indistinguishable (in the graph) from the external method. 
+Figures \ref{fig:cy40}(a) and \ref{fig:cy40}(b) compare the computed drag force of the modified Fadlun and external Luo methods, respectively, with that of Koumoutsakos and Leonard~\cite{Koumoutsakos:1995bf}. The embedded method is not shown because the force is indistinguishable (in the graph) from the external method. 
 \begin{figure}[!htb]
 	\centering
 	\begin{subfigure}{0.4\textwidth}
@@ -975,13 +966,13 @@ Figures \ref{fig:cy40}a and \ref{fig:cy40}b compare the computed drag force of t
 		\includegraphics[width=\linewidth]{cy40luo}
 		\caption{External Luo style solver.}
 	\end{subfigure}
-	\caption{Drag force over time for two solvers compared to Koumoutsakos and Leonard~\cite{Koumoutsakos:1995bf} for flow over an impulsively started cylinder.}
+	\caption{Drag force over time for two solvers compared to Koumoutsakos and Leonard~\cite{Koumoutsakos:1995bf} for flow over an impulsively started cylinder. The embedded method is excluded because its results are the same as the external method.}
 	\label{fig:cy40}
 \end{figure}
 
 For Re=550, a uniform grid with spacing 0.01 is used from (-0.54,-0.54) to (0.54,0.54) for a total of $450\times450$ (202500) cells are used. 
 A time step of 0.0025 is used for a maximum CFL number of 0.6.
-Figures \ref{fig:cy550}a and \ref{fig:cy550}b compare the computed drag force of the modified Fadlun and external Luo methods, respectively, with that of Koumoutsakos and Leonard~\cite{Koumoutsakos:1995bf}.
+Figures \ref{fig:cy550}(a) and \ref{fig:cy550}(b) compare the computed drag force of the modified Fadlun and external Luo methods, respectively, with that of Koumoutsakos and Leonard~\cite{Koumoutsakos:1995bf}.
 \begin{figure}[!htb]
 	\centering
 	\begin{subfigure}{0.4\textwidth}
@@ -993,13 +984,13 @@ Figures \ref{fig:cy550}a and \ref{fig:cy550}b compare the computed drag force of
 		\includegraphics[width=\linewidth]{cy550luo}
 		\caption{External Luo style solver.}
 	\end{subfigure}
-	\caption{Drag force over time for two solvers compared to Koumoutsakos and Leonard~\cite{Koumoutsakos:1995bf} for flow over an impulsively started cylinder.}
+	\caption{Drag force over time for two solvers compared to Koumoutsakos and Leonard~\cite{Koumoutsakos:1995bf} for flow over an impulsively started cylinder. The embedded method is excluded because its results are the same as the external method.}
 	\label{fig:cy550}
 \end{figure}
 
 For Re=3000, a uniform grid with spacing 0.004 is used from (-0.52,-0.52) to (0.52,0.52) for a total of $986\times986$ (972196) cells are used.
 A time step of 0.001 is used for a maximum CFL of 0.65.
-Figures \ref{fig:cy3000}a and \ref{fig:cy3000}b compare the computed drag force of the modified Fadlun external Luo methods, respectively, with that of Koumoutsakos and Leonard~\cite{Koumoutsakos:1995bf} for a Reynolds number of 3000.
+Figures \ref{fig:cy3000}(a) and \ref{fig:cy3000}(b) compare the computed drag force of the modified Fadlun external Luo methods, respectively, with that of Koumoutsakos and Leonard~\cite{Koumoutsakos:1995bf} for a Reynolds number of 3000.
 \begin{figure}[!htb]
 	\centering
 	\begin{subfigure}{0.4\textwidth}
@@ -1019,22 +1010,22 @@ The large drag at the beginning is caused by the impulsive start of flow around 
 At the first time step, when all the fluid nodes have a $u$ velocity of one, the $\frac{du}{dx}$ term of shear force is large, as $du$ is one and $dx$ is the small grid spacing. 
 It is interesting that neither method consistently over or under-predicts the correct drag. 
 Instead, both of them change based on time and Re. 
-Another result of note are the drag oscillations between 0.25 and 0.75 in the Re=3000 Fadlun results shown in Figure \ref{fig:cy3000}a. 
-The modified Fadlun method can develop numerical oscillations when at extreme Reynolds number, grid sizing or time step. 
+Another result of note are the drag oscillations between 0.25 and 0.75 in the Re=3000 Fadlun results shown in Figure \ref{fig:cy3000}(a). 
+The modified Fadlun method can develop numerical oscillations when at extreme Reynolds number, grid sizing, or time step. 
 
 \section{Flow past an in-line oscillating cylinder}
 \label{sec:osccylinder}
 The impulsively started oscillating cylinder is a simulation used by Luo et al.~\cite{Luo:2012gx} to demonstrate and compare the magnitude numerical oscillations between different immersed boundary methods. 
 It does not a verify or validate as it does not compare the results with published work, but rather it is a useful tool to visualize the magnitude of numerical oscillations.
-A true moving-body verification is done in the next Section, \ref{sec:Oscillating Cylinder in no Flow}
+A true moving-body verification is done in Section \ref{sec:Oscillating Cylinder in no Flow}
 This simulation has the same domain, initial, and boundary conditions as the stationary impulsively started cylinder, save for the uniform grid at the center which spans (-2,-2) to (2,2) to account for body's movement.
-The cylinder oscillates along the horizontal centerline according to Equations \eqref{eq:cylinder position} and \eqref{eq:cylinder velocity}.
+The cylinder oscillates along the horizontal centerline according to Equations \eqref{eq:cylinder position} and \eqref{eq:cylinder velocity}:
 \begin{align}
 x&=-0.25\cos{0.4\pi t}\label{eq:cylinder position}\\
-u&=0.1\pi\sin{0.4\pi t}\;\label{eq:cylinder velocity}
+u&=0.1\pi\sin{0.4\pi t}.\;\label{eq:cylinder velocity}
 \end{align}
 The resulting period, maximum velocity, and position are 5, $\pi/10$, and 0.25, respectively. 
-Figure \ref{fig:osccylinder} compares the numerical oscillations observed in drag vs. time. 
+Figure \ref{fig:osccylinder} compares the numerical oscillations observed in drag vs.~time. 
 The left column shows drag force experienced with the external method, and the right column shows the drag force experienced by the embedded method.
 The uniform section is discretized into a $64 \times 64$ grid for the first row and $ 128 \times 128$ grid for last three rows row for h (center grid spacing) values of 0.0625 and 0.03125. 
 The maximum CFL numbers by row are approximately \numlist{0.35; 0.35; 0.7; 1.0}.
@@ -1056,19 +1047,18 @@ The accuracy of the two methods is examined in the next section.
 \section{In-line oscillating cylinder}
 \label{sec:Oscillating Cylinder in no Flow}
 An in-line oscillating of a cylinder (with no inlet or exit and a free stream and initial velocity of zero) is used by Liao et al.~\cite{liao2010simulating} to demonstrate numerical oscillation suppression. 
-Liao et al.~and cuIBM-FSI are validated against the experimental data of Dutsch et al.~\cite{dutsch1998low}. 
-The equations that govern movement, \eqref{eq:cylinder position2} and \eqref{eq:cylinder velocity2}, are the same form as above but with a period, maximum velocity, and position of 1, 1, and $1/2\pi$.
+The results of Liao et al.~and cuIBM-FSI are validated against the experimental data of Dutsch et al.~\cite{dutsch1998low}. 
+The equations that govern movement, \eqref{eq:cylinder position2} and \eqref{eq:cylinder velocity2}, are the same form as above but with a period, maximum velocity, and position of 1, 1, and $1/2\pi$:
 \begin{align}
 x(t)&=\frac{-1}{2\pi}\sin{2\pi t}\label{eq:cylinder position2}\\
-u(t)&=-cos{2\pi t}\;\label{eq:cylinder velocity2}
+u(t)&=-cos{2\pi t}.\;\label{eq:cylinder velocity2}
 \end{align}
 The diameter is matched to the Liao et al.~\cite{liao2010simulating} simulation, which is 0.2. 
 The domain has a uniform section with grid spacing 0.005 from (-0.4,-0.2) to (0.4,0.2) ranging from $\pm$ 5.5 in $x$ to $\pm$ 3.5 in $y$. 
 A Reynolds number of 100 and a KC number (non-dimensional number that represents the bodies oscillation) of 5 is used.
-Figure \ref{fig:staticInit} shows the drag during the first period versus the steady state drag from Dutsch et al.~ \cite{dutsch1998low}. 
+Figure \ref{fig:staticInit} shows the drag during the first period versus the steady state drag from Dutsch et al.~\cite{dutsch1998low}. 
 Figure \ref{fig:static2} shows the steady state drag. 
 In both figures, (a) is the external method and (b) is the embedded method.
- 
 \begin{figure}[!htb]
 	\centering
 	\begin{subfigure}{0.4\textwidth}
@@ -1080,7 +1070,7 @@ In both figures, (a) is the external method and (b) is the embedded method.
 		\includegraphics[width=\linewidth]{staticeminit}
 		\caption{Embedded interpolation method.}
 	\end{subfigure}
-	\caption{Drag force vs. time for the first period compared with steady state Dutsch et al.~\cite{dutsch1998low} for an in-line oscillating cylinder.}
+	\caption{Drag force vs.~time for the first period compared with steady state Dutsch et al.~\cite{dutsch1998low} for an in-line oscillating cylinder.}
 	\label{fig:staticInit}
 \end{figure}
 
@@ -1095,14 +1085,14 @@ In both figures, (a) is the external method and (b) is the embedded method.
 		\includegraphics[width=\linewidth]{staticemss}
 		\caption{Embedded interpolation method.}
 	\end{subfigure}
-	\caption{Drag force verses time for steady state oscillating cylinder in now flow compared to Liao et al.}
+	\caption{Drag force verses time for steady state oscillating cylinder in now flow compared to Liao et al.~\cite{liao2010simulating}}
 	\label{fig:static2}
 \end{figure}
 
 Again, the embedded interpolation method suppresses the oscillations bettern than the external method. It also better predicts the maximum peak, which is about 15\% off of the experimental data.
 
-\section{Vortex induced vibration}
-The vortex induced vibration simulation tests the solvers' ability to predict the position of a freely moving body in coupled fluid structure interaction. 
+\section{Vortex-induced vibration}
+The vortex-induced vibration simulation tests the solvers' ability to predict the position of a freely moving body in coupled fluid structure interaction. 
 The two-dimensional domain is the same as the impulsively started cylinder simulation except the uniform region ranges from (-1.5, -1.5) to (1.5, 1.5). 
 An immersed circle starts at the origin with no initial velocity. 
 The body is free to move in the $y$ direction but fixed in the x and mounted to a spring. 
@@ -1118,7 +1108,7 @@ The natural frequency and critical damping are given by \eqref{eq:nf} and \eqref
 \omega &=2\pi f =\sqrt{\frac{K}{M}}\label{eq:nf}\\
 C_{cr}&=2\sqrt{MK}=2K\omega \; \label{eq:cd}
 \end{align}
-Then Equation \eqref{eq:masspring} can non-dimensionalized to become equation \eqref{eq:ndmasspring}:
+Then Equation \eqref{eq:masspring} can non-dimensionalized to become Equation \eqref{eq:ndmasspring}:
 \begin{equation}
 \frac{\partial^2 Y}{\partial t^2}+4\pi \zeta\frac{1}{U_{red}}\frac{\partial Y}{\partial t}+4\pi^2\frac{1}{u_{red}^2}Y=\frac{1}{2M_{red}}C_Y,\label{eq:ndmasspring}
 \end{equation}
@@ -1139,15 +1129,15 @@ Force coefficient
 \begin{equation}
 C_Y=\frac{2F_Y}{\rho U^2 D}\label{eq:force coefficient}
 \end{equation}
-Varying the parameters, Re, $\zeta$, $M_{red}$, and $U_{red}$ changes the resulting steady-state amplitude. 
-In vortex induced vibration there is a ``lock-in'' phenomenon that occurs when Re=150, $\zeta$=0, $M_{red}$=2, and $U_{red}$ is varied between 3 and 8. 
+Varying the parameters Re, $\zeta$, $M_{red}$, and $U_{red}$ changes the resulting steady-state amplitude. 
+In vortex-induced vibration there is a ``lock-in'' phenomenon that occurs when Re=150, $\zeta$=0, $M_{red}$=2, and $U_{red}$ is varied between 3 and 8. 
 At either extreme for $U_{red}$, the steady-state amplitude will be small, and for values in between the steady-state amplitude will be much larger. 
 
 There are two different ways to update body position: loose and strong coupling. 
 Loose coupling comes from the explicit derivation of Equation \eqref{eq:ndmasspring}.
 A time step using loose coupling proceeds as follows:
 \begin{enumerate}
-	\item Solve for field values at $t^{n+1}$ using the Naiver--Stokes equations.
+	\item Solve for field values at $t^{n+1}$ using the Navier--Stokes equations.
 	\item Calculate body forces.
 	\item Move body using Equations \eqref{eq:lc1} and \eqref{eq:lc2}:
 \end{enumerate}
@@ -1156,55 +1146,54 @@ v^{n+1} &= v^n-\frac{\Delta t\pi^24}{U_{red}^2}\left(y^n+\frac{\Delta tv^n}{2}\r
 y^{n+1} &= y^n +\frac{\Delta t\left(v^{n+1}+v^n\right)}{2}\; \label{eq:lc2}
 \end{align}
 
-Equation \eqref{eq:ndmasspring} can also be discretized implicitly, to achieve strong coupling.
+Equation \eqref{eq:ndmasspring} can also be discretized implicitly to achieve strong coupling.
 A strong coupling time step repeatedly calculates the field values and body kinetics/kinematics until reaching a converged solution.
 As this causes the Poisson equation to be solved multiple times for each time step, strong coupling is a significantly more computationally expensive method:
 \begin{enumerate}
-	\item Solve for field values at sub step $t^{k+1}$ using the Naiver--Stokes equations.
+	\item Solve for field values at sub step $t^{k+1}$ using the Navier--Stokes equations.
 	\item Calculate body forces
-	\item Move body using equations \eqref{eq:lc1} and \eqref{eq:sc}, where $\alpha$ is some relaxation value.
+	\item Move body using Equations \eqref{eq:lc1} and \eqref{eq:sc}, where $\alpha$ is some relaxation value.
 	\item If $|Y^{k+1}-Y^k| \approx 0$, advance time; otherwise advance sub step.
 \end{enumerate}
 \begin{equation}
 y^{k+1} = \alpha \left(y^n+\frac{\Delta t\left(v^{k+1}+v^n\right)}{2}\right) +\left(1-\alpha\right)y^k\label{eq:sc}
 \end{equation}
 
-Figures \ref{fig:viv1}, \ref{fig:viv2}, \ref{fig:viv3} and \ref{fig:viv4} show the maximum amplitude of the six vortex induced vibration simulations as calculated by external loose coupling, external strong coupling, embedded loose coupling and embedded strong coupling respectively. 
-Results are verified against the curvilinear immersed boundary method of Borazjani et al.~\cite{borazjani2008curvilinear} and the unstructured finite-element approach of Ahn and Kallinderis~\cite{ahn2006strongly}.
+Figures \ref{fig:viv1}, \ref{fig:viv2}, \ref{fig:viv3}, and \ref{fig:viv4} show the maximum amplitude of the six vortex-induced vibration simulations as calculated by external loose coupling, external strong coupling, embedded loose coupling and embedded strong coupling respectively. 
+Results are verified against the curvilinear immersed boundary method of Borazjani et al.~\cite{borazjani2008curvilinear} and the unstructured finite-element approach of Ahn and Kallinderis~\cite{ahn2006strongly}. 
+All four configurations used to solve for vortex-induced vibration (embedded/external and loose/strong coupling) of the are able to predict the maximum steady state amplitude fairly accurately even though the external method exhibits noticeable oscillations of similar magnitude to those shown for the impulsively started oscillating cylinder. 
+The main difference between the external and embedded method is the wall-clock time taken to run each, with the embedded method taking nearly an order of magnitude more than the external method.
 \begin{figure}
 	\centering
 	\includegraphics[width=\textwidth]{vivexlc}
-	\caption{External method loose coupling. The maximum amplitude vs. reduced velocity for the lock-in region.}
+	\caption{External method loose coupling. The maximum amplitude vs.~reduced velocity for the lock-in region.}
 	\label{fig:viv1}
 \end{figure}
 \begin{figure}
 	\centering
 	\includegraphics[width=\textwidth]{vivexsc}
-	\caption{External method strong coupling. The maximum amplitude vs. reduced velocity for the lock-in region.}
+	\caption{External method strong coupling. The maximum amplitude vs.~reduced velocity for the lock-in region.}
 	\label{fig:viv2}
 \end{figure}
 \begin{figure}
 	\centering
 	\includegraphics[width=\textwidth]{vivemlc}
-	\caption{Embedded method loose coupling. The maximum amplitude vs. reduced velocity for the lock-in region.}
+	\caption{Embedded method loose coupling. The maximum amplitude vs.~reduced velocity for the lock-in region.}
 	\label{fig:viv3}
 \end{figure}
 \begin{figure}
 	\centering
 	\includegraphics[width=\textwidth]{vivemsc}
-	\caption{Embedded method strong coupling. The maximum amplitude vs. reduced velocity for the lock-in region.}
+	\caption{Embedded method strong coupling. The maximum amplitude vs.~reduced velocity for the lock-in region.}
 	\label{fig:viv4}
 \end{figure}
-All four versions of the are able to predict the maximum steady state amplitude fairly accurately even though the external method has noticeable oscillations of similar magnitude to those shown in the impulsively started oscillating cylinder section. 
-The main difference between the external and embedded method is the wall-clock time taken to run each, with the embedded method taking nearly an order of magnitude more than the external method.
 
-
-\chapter{Solver Characterization}
+\chapter{Solver characterization}
 \label{chapter:error}
 This section will evaluate the different methods used in terms of order of accuracy and performance scaling. 
 The modified Fadlun, external Luo, and embedded Luo methods will be evaluated using the impulsively started cylinder simulation and the external and embedded Luo methods will be evaluated again using an oscillating cylinder in flow. 
 
-\section{Order of Accuracy}
+\section{Order of accuracy}
 Order of accuracy is evaluated by using a simulation evaluated with a fine grid as the ``exact'' solution.
 Coarser grids have their error calculated using the exact solution and are plotted on a log scale to show effects of grid size on accuracy.
 
@@ -1249,22 +1238,22 @@ However, the effect is also present in the modified Fadlun method, at a differen
 
 \begin{figure}[!htb]
 	\centering
-	\begin{subfigure}{0.45\textwidth}
+	\begin{subfigure}{0.48\textwidth}
 		\includegraphics[width=\linewidth]{embedded01}
 		\caption{Center spacing h=0.01}
 	\end{subfigure}
 	~
-	\begin{subfigure}{0.45\textwidth}
+	\begin{subfigure}{0.48\textwidth}
 		\includegraphics[width=\linewidth]{embedded015625}
 		\caption{Center spacing h=0.015625}
 	\end{subfigure}
-	\caption{Drag force vs. time for different grid spacings using the embedded solver.}
+	\caption{Drag force vs.~time for different grid spacings using the embedded solver.}
 	\label{fig:embedded005}
 \end{figure}
 \begin{figure}[!htb]
 	\centering
 	\includegraphics[width=0.6\textwidth]{embedded_error_01}
-	\caption{Error in drag force vs. time using the embedded method with a center grid spacing of 0.01.}
+	\caption{Error in drag force vs.~time using the embedded method with a center grid spacing of 0.01.}
 	\label{fig:embeddederror005}
 \end{figure}
 
@@ -1275,12 +1264,12 @@ The coarsest grid does not pick up the discontinuity and returns a smooth drag c
 
 \begin{figure}[!htb]
 	\centering
-	\begin{subfigure}{0.45\textwidth}
+	\begin{subfigure}{0.48\textwidth}
 		\includegraphics[width=\linewidth]{fadlun005}
 		\caption{Fadlun method: grid size 0.005}
 	\end{subfigure}
 	~
-	\begin{subfigure}{0.45\textwidth}
+	\begin{subfigure}{0.48\textwidth}
 			\includegraphics[width=\linewidth]{fadlun03}
 			\caption{Fadlun method: grid size 0.03}
 	\end{subfigure}
@@ -1290,14 +1279,14 @@ The coarsest grid does not pick up the discontinuity and returns a smooth drag c
 
 Figure~\ref{fig:cyerror2} presents a better calculation of order of accuracy. 
 The order of accuracy here is calculated using the $u$ velocity field. 
-Velocity values from the fine grid are bi-linearly interpolated for at the location of velocity values from the coarse grid then turned to error using Equation~\eqref{eq:errorvel}:
+Velocity values from the fine grid are bilinearly interpolated for at the location of velocity values from the coarse grid then used to calculate to error using Equation~\eqref{eq:errorvel}:
 \begin{equation}
-Error_{avg}=\left(\sum_{nx\cdot ny}^{} \left|\frac{u_{fine}-u_{coarse}}{u_{fine}}\right|\right)/(nx\cdot ny)
+Error_{\text{avg}}=\left(\sum_{nx\cdot ny}^{} \left|\frac{u_{fine}-u_{coarse}}{u_{fine}}\right|\right)/(n_x\cdot n_y)
 \label{eq:errorvel}
 \end{equation}
 The average error can then be used to calculate the order of accuracy using Equation \eqref{eq:ooa}: 
 \begin{equation}
-\text{Order of Accuracy} = \frac{\log \left(error_{fine}/error_{coarse}\right)}{\log \left(h_{fine}/h_{coarse}\right)}\label{eq:ooa}
+\text{Order of Accuracy} = \frac{\log \left(Error_{\text{fine}}/Error_{\text{coarse}}\right)}{\log \left(h_{\text{fine}}/h_{\text{coarse}}\right)}\label{eq:ooa}
 \end{equation}
 
 \begin{figure}[H]
@@ -1307,18 +1296,18 @@ The average error can then be used to calculate the order of accuracy using Equa
 	\label{fig:cyerror2}
 \end{figure}
 The order of accuracy for all three methods is around one and a half, with the external method having the highest and the embedded having the lowest. 
-Although Crank--Nicolson and Adams--Bashforth discretization are both second order accurate, the treatment at the body significantly reduces the overall order of accuracy. 
+Although Crank--Nicolson and Adams--Bashforth discretization are both second order accurate, the treatment at the body to between first- and second- order accuracy. 
 
 
 \subsection{Oscillating cylinder in flow}
 The embedded and external methods also have their order of accuracy tested using flow over an in-line oscillating cylinder. 
 The modified Fadlun method was not tested here because it proved too unstable to perform with varying grid sizes and time steps. 
-Figure~\ref{fig:oscerror} shows the error vs. grid spacing plots for the external and embedded methods. 
+Figure~\ref{fig:oscerror} shows the error with changing grid spacing for the external and embedded methods. 
 Interestingly, the two methods have nearly the same order of accuracy even though the external method is known to have higher amplitude oscillations (as shown in Section \ref{sec:osccylinder}). 
 
 \begin{figure}[!htb]
 	\centering
-	\includegraphics[width=0.4\linewidth]{error_oscflow}
+	\includegraphics[width=0.6\linewidth]{error_oscflow}
 	\caption{Order of accuracy plotted against grid spacing shows the order of accuracy for the two solvers on the oscillating cylinder in flow simulation.}
 	\label{fig:oscerror}
 \end{figure}
@@ -1328,7 +1317,7 @@ Performance is evaluated by comparing the total number of cells and the computat
 Typically, certain parts of the simulation take longer than others. 
 The number of iterations taken to solve the Poisson equation gives a rough estimate of the overall wall-clock time because the Poisson step takes a large majority of the overall time.
 Figure~\ref{fig:iter} shows the number of iterations used for each Poisson solve. 
-Figures \ref{fig:iter}(a), (b) and (c) show the iterations over time for an impulsively started cylinder simulation, and an external and embedded oscillating cylinder in flow simulation, respectively. 
+Figures \ref{fig:iter}(a), (b), and (c) show the iterations over time for an impulsively started cylinder simulation, and an external and embedded oscillating cylinder in flow simulation, respectively. 
 The iteration count is largest when the flow field is highly transient. 
 For instance, in the impulsively started cylinder flow the iterations are  largest at the beginning because the flow fields are going from unity velocity and no pressure gradient to a fully developed boundary layer. 
 Note that \ref{fig:iter}(a) is solved using the external method which does not have any discontinuities or oscillations in the drag as seen in Figures \ref{fig:embedded005} or \ref{fig:fadlun005}. 
@@ -1339,17 +1328,17 @@ The average iteration count for the external method is around 30 and the embedde
 If the above assertion that iteration count is a rough estimate of time is true, then the embedded method should take an order of magnitude more time for the oscillating cylinder simulation.
 \begin{figure}[!htb]
 	\centering
-	\begin{subfigure}{0.5\textwidth}
+	\begin{subfigure}{0.6\textwidth}
 		\includegraphics[width=\linewidth]{cy_iter}
 		\caption{Impulsively started cylinder}
 	\end{subfigure}
 	
-	\begin{subfigure}{0.5\textwidth}
+	\begin{subfigure}{0.6\textwidth}
 		\includegraphics[width=\linewidth]{ex_iter}
 		\caption{External oscillating cylinder}
 	\end{subfigure}
-	~
-	\begin{subfigure}{0.5\textwidth}
+	
+	\begin{subfigure}{0.6\textwidth}
 		\includegraphics[width=\linewidth]{em_iter}
 		\caption{Embedded oscillating cylinder}
 	\end{subfigure}
@@ -1361,7 +1350,7 @@ If the above assertion that iteration count is a rough estimate of time is true,
 
 The performance of the impulsively started cylinder simulation is evaluated using the same set of simulations as the order of accuracy. 
 Figure~\ref{fig:cyperf} shows the performance of all three methods calculated on two different GPUs. 
-The 750ti is a less powerful than the k-20 with 640 and 2496 processor cores, respectively.
+The 750ti is less powerful than the K20 with 640 and 2496 processor cores, respectively.
 \begin{figure}[!htb]
 	\centering
 	\includegraphics[width=0.6\textwidth]{cylinder_performance}
@@ -1439,12 +1428,12 @@ Figure~\ref{fig:performance2} shows the resulting computational time.
 Halving the grid size causes the embedded method's computational time to increase by 150\%, where the external method only increases by 33\%. 
 \begin{figure}[!htb]
 	\centering
-	\includegraphics[width=0.4\linewidth]{performance_oscflow2}
+	\includegraphics[width=0.6\linewidth]{performance_oscflow2}
 	\caption{Computational time for flow over an in-line oscillating cylinder. The total cell count and uniform grid section size are held constant.}
 	\label{fig:performance2}
 \end{figure}
 
-\chapter{Summary and future work} 
+\chapter{Summary and recommendations for future work} 
 Immersed boundary methods are a powerful numerical approach that excel at simulating complex fluid structure interactions problems. 
 The study and optimization of such a device requires an accurate and fast solver. 
 This speed is obtained through the massive parallelism of a GPU, which is currently largely underutilized in commercial software. 
@@ -1473,9 +1462,9 @@ For both methods, decreasing the grid spacing, or increasing the CFL number redu
 Oscillations in the x-direction in a static flow field is used to quantitatively verify the two methods. 
 This simulation showed the external method to be slightly less accurate than the embedded method, and reinforced, the previously stated results of the impulsively started oscillating cylinder simulation. 
 
-The last test is vortex induced vibration, which features bodies that are anchored at the origin but free to move based on forces imparted by the flow. 
+The last test is vortex-induced vibration, which features bodies that are anchored at the origin but free to move based on forces imparted by the flow. 
 Two methods for updating the fluid structure interaction were tested: loose and strong coupling. 
-All four variations of loose and strong coupling, external and embedded were able to successfully predict the forces, position, and velocity of vortex induced vibrations. 
+All four variations of loose and strong coupling, external and embedded were able to successfully predict the forces, position, and velocity of vortex-induced vibrations. 
 The main difference between the embedded method and the external method is the time taken to solve each. 
 Each of the six simulations ($U_{red}$ one through six) is simulated to time 60. 
 The external loose coupling takes around eight hours where as the embedded loose coupling takes around 60. 
@@ -1499,7 +1488,7 @@ In addition, CUSP does not support multiple GPUs, meaning that this code can not
 \bibliography{thesis}
 
 \appendix
-\chapter{Solving a system of four eqations on the GPU}\label{system of euqations}
+\chapter{Solving a system of four equations on the GPU}\label{system of euqations}
 \begin{gather}
 	A = 
 	\begin{bmatrix}
