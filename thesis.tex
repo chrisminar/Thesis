@@ -26,6 +26,7 @@ We also thank the Barba Group for developing, maintaining, and distributing thei
 Thank you to my committee, everyone in the Niemeyer research group and the NNMREC lab.}
 
 \usepackage{algorithm}
+\usepackage{booktabs}
 \usepackage{algorithmic}
 \usepackage[textsize=footnotesize]{todonotes}%used for inline todo notes with \todo[]{}
 \usepackage{latexsym,amsmath,amssymb} %math packages
@@ -74,7 +75,7 @@ Mohd-Yusof~\cite{MohdYusof:1997wh} and Fadlun et al.~\cite{Fadlun:2000fl} develo
 Direct forcing methods interpolate for velocity at the nodes nearest to the body using the body velocity, eliminating the need to solve for a forcing term while simultaneously enforcing the no-slip condition.
 The early direct forcing methods did not include a method of modifying the Poisson equation for the presence of a body. 
 Not accounting for the body in the Poisson equation violates conservation of mass at the body. 
-Kim et al\cite{kim2001immersed}. developed a direct forcing method that adds mass source or sink terms at nodes intersected by the boundary to satisfy the conservation equation. 
+Kim et al.~\cite{kim2001immersed}. developed a direct forcing method that adds mass source or sink terms at nodes intersected by the boundary to satisfy the conservation equation. 
 
 Using the direct forcing method with a moving body can cause numerical oscillations~\cite{liao2010simulating,Luo:2012gx}.
 This effect can be manageable for preset motion, but with a freely moving body the solver will poorly predict body position, velocity, and forces. 
@@ -445,7 +446,7 @@ FxY &=-\sum_{\Omega_x}\left(0.5(u_nv_n-u_sv_s)-0.25\nu \left(\left.\frac{du}{dy}
 FxU &=\frac{u_i^{n+1}-u_i^{n}}{dt}0.5dydx\;\label{eq:force calculation 4}
 \end{align}
 The subscripts $n$,$e$,$s$,$w$ represent the north, east, south and west faces of the sqaure domain $\Omega_0$, respectively.
-In practice, varying the size of $\Omega_0$ from $L=4$ to $L=10$ was not found to have a significant effect on the force or computation time.
+In practice, varying the size of $\Omega_0$ from $L=4$ to $L=10$ was not found to have a significant effect on the force or computabletion time.
 The body did not have to be at the exact center of the domain.
 Given this, the control volume is generally kept in the same location as the body moves around inside it.
 Typically a square with sides $L=10$ is used for a body of size $D=1$ that moves about $D$ away from center.
@@ -643,7 +644,7 @@ u_{i,j}^{n+1} = \hat{u} - \frac{p_{i+1,j}^{n+1} - p_{i,j}^{n+1}}{dx_i + dx_{i+1}
 \label{sec:ID fadlun}
 \label{sec:modified fadlun}
 When at an immersed body, the Navier--Stokes equation needs some additional treatment to correctly represent a body. 
-This section will detail the implementation of my modified Fadlun et al. \cite{Fadlun:2000fl} approach to dealing with an immersed boundary.
+This section will detail the implementation of my modified Fadlun et al.~\cite{Fadlun:2000fl} approach to dealing with an immersed boundary.
 
 \subsection{Intermediate velocity}
 \label{sec:ID fadlun intermediate velocity}
@@ -686,22 +687,22 @@ If the body passes through the cell, $dx_i$ and/or $dy_j$ from Equation \eqref{e
 \section{Luo Immersed Boundary Method}
 \label{sec:ID luo}
 cuIBM-FSI has two methods based off the approach given by Luo et al~\cite{Luo:2012gx}. 
-Luo et al. extrapolates values to ghost nodes an interpolates values at hybrid nodes.
+Luo et al.~extrapolates values to ghost nodes an interpolates values at hybrid nodes.
 They left out details describing exactly where all this interpolating and extrapolating takes place. 
 I tried doing it two ways. 
 The key difference between the two approaches is when the extrapolation and interpolation takes place. 
-The `external' method moves the interpolation and extrapolation outside of the linear algebra. 
+The ``external'' method moves the interpolation and extrapolation outside of the linear algebra. 
 Separating the extrapolation, interpolation, and linear algebra steps causes each one to not have access to the most updated information when being calculated because they all depend on each other. 
 Simplifying the linear algebra this way reduces the computational time at the cost of reduced accuracy and increased numerical oscillation. 
 
-The `embedded' method performs  interpolations, extrapolations, and weighting inside of the linear algebra solutions for the intermediate velocity and pressure. 
+The ``embedded'' method performs  interpolations, extrapolations, and weighting inside of the linear algebra solutions for the intermediate velocity and pressure. 
 All of the extrapolation and interpolation happens inside of the linear algebra steps.
 Field values will solved by plugging Equations~\eqref{eq:Intermediate Velocity} or \eqref{eq:Poisson} and \eqref{eq:Interpolation} into Equation~\eqref{eq:Weight}. 
 The discretization of these can be seen in section \ref{sec:ID embedded}. 
 
 Two key implementation details distinguish cuIBM-FSI from Luo et al.~\cite{Luo:2012gx}. 
-Firstly, Luo et al. did not use a staggered grid. 
-Secondly, Luo et al. used Crank--Nicholson to discretize both the advection and diffusion terms, whereas cuIBM-FSI uses Adams--Bashforth for the advection terms. 
+Firstly, Luo et al.~did not use a staggered grid. 
+Secondly, Luo et al.~used Crank--Nicholson to discretize both the advection and diffusion terms, whereas cuIBM-FSI uses Adams--Bashforth for the advection terms. 
 
 \subsection{External interpolation method}
 \label{sec:ID external}
@@ -858,23 +859,23 @@ The implementation of the embedded Poisson equation is the same as outlined abov
 
 \chapter{Verification and validation}\label{chapter:Validation}
 The three immersed boundary methods have been compared against four well known simulations and experiments. 
-The term `verification' will be used when comparing against other simulations and the term `validation' will be used when comparing against experimental data.
+The term ``verification'' will be used when comparing against other simulations and the term ``validation'' will be used when comparing against experimental data.
 Each simulation was chosen to test a specific capability of the solver and compound in difficulty. 
 Table \ref{table:1} shows which immersed boundary methods are tested with each simulation.
 
 \begin{table}
 	\centering
-	\begin{tabular}[htb]{|l|l|c|c|c|}
-		\hline
-		\# & Simulation name & Modified Fadlun & External & Embedded \\ \hline
-		1&Lid-driven cavity flow & x & x & x \\ \hline
-		2&Impulsively started cylinder & \checkmark & \checkmark & \checkmark \\ \hline
-		3&Oscillating cylinder & x & \checkmark & \checkmark \\ \hline
-		4&Impulsively started oscillating cylinder & x & \checkmark & \checkmark \\ \hline
+	\begin{tabular}[htb]{@{}llccc@{}}
+		\toprule
+		\# & Simulation name & Modified Fadlun & External & Embedded \\ \midrule
+		1&Lid-driven cavity flow & x & x & x \\
+		2&Impulsively started cylinder & \checkmark & \checkmark & \checkmark \\
+		3&Oscillating cylinder & x & \checkmark & \checkmark \\
+		4&Impulsively started oscillating cylinder & x & \checkmark & \checkmark \\
 		5&Vortex induced vibration & x & \checkmark & \checkmark \\
-		\hline
+		\bottomrule
 	\end{tabular}
-\caption{}\label{table:1}
+	\caption{Which immersed boundery methods are tested with what simulations.}\label{table:1}
 \end{table}
 
 Lid-driven cavity flow is the classic validation case for my fluid dynamics solver. 
@@ -1055,7 +1056,7 @@ The accuracy of the two methods is examined in the next section.
 \section{In-line oscillating cylinder}
 \label{sec:Oscillating Cylinder in no Flow}
 An in-line oscillating of a cylinder (with no inlet or exit and a free stream and initial velocity of zero) is used by Liao et al.~\cite{liao2010simulating} to demonstrate numerical oscillation suppression. 
-Liao et al. and cuIBM-FSI are validated against the experimental data of Dutsch et al.~\cite{dutsch1998low}. 
+Liao et al.~and cuIBM-FSI are validated against the experimental data of Dutsch et al.~\cite{dutsch1998low}. 
 The equations that govern movement, \eqref{eq:cylinder position2} and \eqref{eq:cylinder velocity2}, are the same form as above but with a period, maximum velocity, and position of 1, 1, and $1/2\pi$.
 \begin{align}
 x(t)&=\frac{-1}{2\pi}\sin{2\pi t}\label{eq:cylinder position2}\\
