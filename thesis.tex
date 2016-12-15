@@ -56,6 +56,28 @@ Thank you to my committee, everyone in the Niemeyer research group, and the NNMR
 \mainmatter
 
 \chapter{Introduction}
+Wave energy converters are seafaring devices that harvest waves to create electrical energy. 
+In the Atlantic, the sea floor can be shallow enough to drill pylons into. 
+A wave energy converter can use the relative motion of a buoy rolling in the waves and the anchored pylon to make electricity. 
+In the Pacific, the sea floor is too deep to make use of the sea bed. 
+Instead, some wave energy converters use a large underwater disk called a ``heave plate''.
+The purpose of a heave plate is to make as much drag as possible when buoy tries to pull it up through the water, creating an immobile base as possible to substitute as an anchor. 
+To make wave energy converters cost competitive with established renewable and fossil fuels they optimized to be as efficient as possible. 
+Doing this requires a fast, accurate fluid flow solver capable of handling fluid structure interaction for complex bodies. 
+
+Modern CPUs typically have 4-8 cores. 
+Graphics processing units (GPUs) can have hundreds to thousands of simpler cores. 
+The key getting high performance with a GPU is using them for highly parallel problems.
+A highly parallel problem is one where lots of data can be operated on at the same time. 
+Many operations in computer graphics are parallel because each pixel can be calculated independently. 
+Computational fluid dynamics presents another opportunity for GPU acceleration. 
+To solve for fluid flow the Navier--Stokes equations must be discretized and solved simultaneously at many finite grid points. 
+Most of the calculations required can assign one grid point to its own core. 
+
+The goal of this project is to develop a GPU-based fluid flow solver called cuIBM-FSI~\cite{cuIBM-v0.1}: CUda (Compute Unified Device Architecture, a programming language for NVIDIA GPUs) Immersed Boundary Method Fluid Structure Interaction. 
+The eventual purpose of cuIBM-FSI is to have a highly efficient solver to study wave energy converters.
+This thesis will showcase cuIBM-FSI and the development of simulating 2D, incompressible flow over a freely moving body using a GPU. 
+
 Immersed boundary methods (IBMs) refer to a group of approaches used to simulate fluid flow over complex bodies. 
 immersed boundary methods attempt to represent a body without using a body-fitted mesh. 
 These techniques are well-suited for simulating flow involving complex, moving bodies because they do not require re-meshing between time steps. 
@@ -82,9 +104,13 @@ This effect can be manageable for preset motion, but with a freely moving body t
 The numerical oscillations are caused by having different solution regimes in the domain, e.g., interpolation near the body and Navier--Stokes everywhere else. 
 Luo et al.~\cite{Luo:2012gx} deal with the numerical oscillations with a weighting function to transition between the two schemes, removing the discontinuity where the regimes transition. 
 
-The goal of this project is to develop a GPU-based solver, called cuIBM-FSI~\cite{cuIBM-v0.1} CUda (Compute Unified Device Architecture, a GPU programming language for NVIDIA GPUs) Immersed Boundary Method Fluid Structure Interaction. 
-The eventual purpose of cuIBM-FSI is to have a highly efficient solver to study two-dimensional fluid structure interaction problem. 
-This thesis will showcase cuIBM-FSI and the development of simulating 2D, incompressible flow over a freely moving body using a GPU.
+cuIBM-FSI was forked from another GPU based direct forcing solver called cuIBM\cite{layton2011cuibm}. 
+cuIBM implemented a Taira and Colonius\cite{Taira:2007jl} style direct forcing solver. 
+In 2014 Krishnan et al.~\cite{krishnan2014lift} used cuIBM to study the fluid flow around the body of a gliding snake. 
+In that study the body is stationary. 
+Work published in 2012 by Krishnan and  Barba\cite{krishnan2012validation} shows that cuIBM suffers numerical oscillations when using a moving body. 
+Most of cuIBM was rewritten after struggling to implement moving bodies. 
+In addition, all calculations in cuIBM-FSI are done on the GPU whereas some are done on the CPU in cuIBM.
 
 Chapter \ref{chapter:Numerical Methods} discusses the theory of direct forcing methods and their applicability to freely moving bodies. 
 Chapter \ref{chapter:Implementation} covers the discretization of these methods as well as the challenges, strategies, and implementation for the GPU. 
@@ -338,7 +364,7 @@ First, all calculations are performed on the GPU, and all data is stored on the 
 Typically, efforts are taken to avoid thread divergence when writing code for a GPU. 
 I found it favorable to write kernels with occasionally poor thread-parallel performance, i.e., kernels with significant divergence, rather than copying data to the host to do calculations to reduce divergence. 
 Increasing the parallel performance of kernels has little effect on the overall solver performance, because solving the Poisson equation typically takes more than \SI{90}{\percent} of the total computational time. 
-In my experience, transferring data back and forth took significantly more time than would be saved by running some operations on a CPU. 
+In the cases that were tested, transferring data back and forth took significantly more time than would be saved by running some operations on a CPU. 
 In addition to non-Poisson kernels being a low overall portion of the run time, the effect of the divergence turns out to be small. 
 For most kernels, the divergence occurs in cells near the body because differentiating between hybrid, ghost, fluid, and solid nodes requires if statements. 
 Divergence happens due to the hardware operating inside of a GPU. 
@@ -930,6 +956,7 @@ Figures~\ref{fig:ldc} (a) and (c) show the $v$ velocity at the horizontal center
 
 \section{Impulsively started cylinder flow}
 \label{sec:cylinder}
+\todo[inline]{should present Linf, L2 and L error norms with grid refinement}
 The impulsively started cylinder simulation tests the immersed boundary methods' ability to handle an immersed body. 
 It also tests the stretched grid and force calculation. 
 This test mimics a body being ``impulsively started'', as if it was struck by a hammer. 
@@ -1012,7 +1039,7 @@ It is interesting that neither method consistently over or under-predicts the co
 Instead, both of them change based on time and Re. 
 Another result of note are the drag oscillations between 0.25 and 0.75 in the Re=3000 Fadlun results shown in Figure \ref{fig:cy3000}(a). 
 The modified Fadlun method can develop numerical oscillations when at extreme Reynolds number, grid sizing, or time step. 
-
+\todo[inline]{how is drag force calculated for impulsively started cylinder}
 \section{Flow past an in-line oscillating cylinder}
 \label{sec:osccylinder}
 The impulsively started oscillating cylinder is a simulation used by Luo et al.~\cite{Luo:2012gx} to demonstrate and compare the magnitude numerical oscillations between different immersed boundary methods. 
@@ -1090,7 +1117,7 @@ In both figures, (a) is the external method and (b) is the embedded method.
 \end{figure}
 
 Again, the embedded interpolation method suppresses the oscillations bettern than the external method. It also better predicts the maximum peak, which is about 15\% off of the experimental data.
-
+\todo[inline]{need more validation data from dutsch}
 \section{Vortex-induced vibration}
 The vortex-induced vibration simulation tests the solvers' ability to predict the position of a freely moving body in coupled fluid structure interaction. 
 The two-dimensional domain is the same as the impulsively started cylinder simulation except the uniform region ranges from (-1.5, -1.5) to (1.5, 1.5). 
@@ -1110,7 +1137,7 @@ C_{cr}&=2\sqrt{MK}=2K\omega \; \label{eq:cd}
 \end{align}
 Then Equation \eqref{eq:masspring} can non-dimensionalized to become Equation \eqref{eq:ndmasspring}:
 \begin{equation}
-\frac{\partial^2 Y}{\partial t^2}+4\pi \zeta\frac{1}{U_{red}}\frac{\partial Y}{\partial t}+4\pi^2\frac{1}{u_{red}^2}Y=\frac{1}{2M_{red}}C_Y,\label{eq:ndmasspring}
+\frac{\partial^2 Y}{\partial t^2}+4\pi \zeta\frac{1}{U_{red}}\frac{\partial Y}{\partial t}+4\pi^2\frac{1}{U_{red}^2}Y=\frac{1}{2M_{red}}C_Y,\label{eq:ndmasspring}
 \end{equation}
 where the non-dimensional coefficients are:\newline
 Damping coefficient
@@ -1203,6 +1230,7 @@ Grid spacings of \numlist{0.005; 0.005; 0.01} are used as the ``exact'' solution
 Using a different exact grid size causes the embedded results to not be directly comparable but using a finer grid proved to make the simulation unstable. 
 The reason for this is discussed below. 
 Figure~\ref{fig:cyerror} shows the error calculated calculated based on drag coefficient for three coarser grids with center grid spacings ranging from 0.0625 to 0.01. 
+\todo[inline]{<first order? why?}
 \begin{figure}[H]
 	\centering
 	\begin{subfigure}{0.5\textwidth}
@@ -1295,6 +1323,7 @@ The average error can then be used to calculate the order of accuracy using Equa
 	\caption{Order of accuracy calculated at multiple time steps before the discontinuities.}
 	\label{fig:cyerror2}
 \end{figure}
+\todo[inline]{why higher order for external}
 The order of accuracy for all three methods is around one and a half, with the external method having the highest and the embedded having the lowest. 
 Although Crank--Nicolson and Adams--Bashforth discretization are both second order accurate, the treatment at the body to between first- and second- order accuracy. 
 
@@ -1308,7 +1337,7 @@ Interestingly, the two methods have nearly the same order of accuracy even thoug
 \begin{figure}[!htb]
 	\centering
 	\includegraphics[width=0.6\linewidth]{error_oscflow}
-	\caption{Order of accuracy plotted against grid spacing shows the order of accuracy for the two solvers on the oscillating cylinder in flow simulation.}
+	\caption{Error plotted against grid spacing shows the two solvers' order of accuracy for an oscillating cylinder in flow.}
 	\label{fig:oscerror}
 \end{figure}
 
@@ -1408,6 +1437,7 @@ Previously, the more powerful GPU (specifically as measured by the amount of pro
 For the oscillating cylinder, smaller grid sizes have a very low speedup, which means that using a more powerful GPU for those simulations does not improve performance. 
 This happens when the non-parallel sections of the solver take more time than the parallel sections. 
 As cell count increases, the parallel portions become larger resulting in a larger speedup. 
+\todo{need (seconds) on y axis}
 \begin{figure}[!htb]
 	\centering
 	\includegraphics[width=0.6\linewidth]{osc_performance}
@@ -1425,14 +1455,19 @@ To test this, three grid spacings of 0.0625, 0.05, and 0.03125 were tested.
 The uniform grid section was held constant, ranging from (-1.5,-1.5) to (1.5,1.5). 
 The cell count was kept at $224\times224$ ($\approx$60k total) by modifying the stretch ratios. 
 Figure~\ref{fig:performance2} shows the resulting computational time. 
-Halving the grid size causes the embedded method's computational time to increase by 150\%, where the external method only increases by 33\%. 
+Halving the grid size causes the embedded method's computational time to increase by 150\%, where the external method only increases by 33\%.
+\todo{wrong plot name}
+\todo{plots are all grouped here for some weird reason} 
 \begin{figure}[!htb]
 	\centering
 	\includegraphics[width=0.6\linewidth]{performance_oscflow2}
 	\caption{Computational time for flow over an in-line oscillating cylinder. The total cell count and uniform grid section size are held constant.}
 	\label{fig:performance2}
 \end{figure}
-
+\todo[inline]{Need a lot more validation}
+\todo[inline]{Steady flow over a stationay cylinder at re40 has several studies}
+\todo[inline]{Inline oscillation and impulsively started Dutsch}
+\todo[inline]{VIV. look at karniadakis and blackburn, alonso et al. aiaa 95-0048}
 \chapter{Summary and recommendations for future work} 
 Immersed boundary methods are a powerful numerical approach that excel at simulating complex fluid structure interactions problems. 
 The study and optimization of such a device requires an accurate and fast solver. 
