@@ -70,12 +70,20 @@ Graphics processing units (GPUs) can have hundreds to thousands of simpler cores
 The key getting high performance with a GPU is using them for highly parallel problems.
 A highly parallel problem is one where lots of data can be operated on at the same time. 
 Many operations in computer graphics are parallel because each pixel can be calculated independently. 
-Computational fluid dynamics presents another opportunity for GPU acceleration. 
-To solve for fluid flow the Navier--Stokes equations must be discretized and solved simultaneously at many finite grid points. 
+Computational fluid dynamics presents another opportunity for GPU acceleration because when solving for fluid flow the Navier--Stokes equations must be discretized and solved simultaneously at many finite grid points. 
 Most of the calculations required can assign one grid point to its own core. 
 
-The goal of this project is to develop a GPU-based fluid flow solver called cuIBM-FSI~\cite{cuIBM-v0.1}: CUda (Compute Unified Device Architecture, a programming language for NVIDIA GPUs) Immersed Boundary Method Fluid Structure Interaction. 
-The eventual purpose of cuIBM-FSI is to have a highly efficient solver to study wave energy converters.
+A lot of recent work has been focused on writing algorithms to work on GPU accelerated hybrid clusters, or traditional super computers with GPUs available at each node~\cite{xu2014collaborating,liu2016hybrid,norouzi2016new}. 
+This is sometimes referred to as GPU acceleration. 
+On a cluster it makes sense to use both CPU and GPU because data passed between nodes using MPI must be transfered to the CPU. 
+When there is only one node, such as in a workstation, the time it takes to transfer data between the CPU and GPU is often prohibitive. 
+In addition, a modern GPUs are approaching 10 TeraFLOPs compared to CPUs which typically achieve 500 GigaFLOPs without over-clocking.
+The goal of this project is to develop a fluid flow solver that only uses the GPU called cuIBM-FSI~\cite{cuIBM-v0.1}: CUda (Compute Unified Device Architecture, a programming language for NVIDIA GPUs) Immersed Boundary Method Fluid Structure Interaction. 
+The eventual purpose of cuIBM-FSI is to have a highly efficient solver to study wave energy converters. 
+cuIBM-FSI was forked from cuIBM which was developed by the Barba group~\cite{layton2011cuibm}. 
+cuIBM is a GPU based immersed boundary method primarily based around the solver developed by Taira and Colonius~\cite{Taira:2007jl}. 
+It can not handle coupled fluid structure interaction and produces numerical oscillations when working with moving bodies~\cite{Krishnan:2012jt}. 
+Since forking, most of the discretization done in cuIBM has been rewritten for the new solvers but the code structure and i/o is largely the same. 
 This thesis will showcase cuIBM-FSI and the development of simulating 2D, incompressible flow over a freely moving body using a GPU. 
 
 Immersed boundary methods (IBMs) refer to a group of approaches used to simulate fluid flow over complex bodies. 
@@ -1116,11 +1124,11 @@ In both figures, (a) is the external method and (b) is the embedded method.
 		\includegraphics[width=\linewidth]{staticemss}
 		\caption{Embedded interpolation method.}
 	\end{subfigure}
-	\caption{Drag force verses time for steady state oscillating cylinder in now flow compared to Liao et al.~\cite{liao2010simulating}}
+	\caption{Drag force verses time for steady state oscillating cylinder in now flow compared to Dutsch et al.~\cite{dutsch1998low}}
 	\label{fig:static2}
 \end{figure}
 
-Again, the embedded interpolation method suppresses the oscillations bettern than the external method. It also better predicts the maximum peak, which is about 15\% off of the experimental data.
+Again, the embedded interpolation method suppresses the oscillations better than the external method. It also better predicts the maximum peak, which is about 15\% off of the experimental data.
 %\todo{add accent to dutsch}
 Figure~\ref{fig:KC 10} shows the validation against Dutsch for a Reynolds number of 200 and a KC of ten. 
 Note that this is comparing the drag dating during the 14th cycle. 
@@ -1138,7 +1146,7 @@ Once again, the embedded method is suppressing oscillations better than the exte
 		\includegraphics[width=\linewidth]{Embedded_static_kc10}
 		\caption{Embedded interpolation method.}
 	\end{subfigure}
-	\caption{Drag force over the 14th period for in-line oscillating cylinder flow with Re=200, KC=10 compared to Liao et al.~\cite{liao2010simulating}}
+	\caption{Drag force over the 14th period for in-line oscillating cylinder flow with Re=200, KC=10 compared to Dutsch et al.~\cite{dutsch1998low}}
 	\label{fig:KC 10}
 \end{figure}
 \section{Vortex-induced vibration}
